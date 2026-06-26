@@ -6,9 +6,9 @@ Many service points struggle with both long queues and poor visibility into wait
 
 ## Team Members
 - Killian Trahan (@ktrah15-uh)
-- Andy
-- Alan
-- David
+- Andres Montes Zamora (@aandrres)
+- Alan Zamora (@alanjzamora)
+- David Dick
 
 ## Platform & Approach
 - Web/App?
