@@ -1,5 +1,5 @@
 # Queuesmart
-A queue management [app/website] that allows people to see their estimated wait time, as well as join the queue without standing in line.
+A queue management website that allows people to see their estimated wait time, as well as join the queue without standing in line.
 
 ## About
 Many service points struggle with both long queues and poor visibility into wait times. QueueSmart allows **users** to join the queue or book an appointment, see their position and estimated wait time, and get notified when their turn is near. It gives **administrators** tools to create services, manage queues and priorities, and track usage.
@@ -11,9 +11,9 @@ Many service points struggle with both long queues and poor visibility into wait
 - David Dick
 
 ## Platform & Approach
-- Web/App?
-- Notification style?
-- Methodology (Agile?)
+- Web
+- Notification style: Email/SMS
+- Methodology: Agile
 
 ## Repository Structure
 
