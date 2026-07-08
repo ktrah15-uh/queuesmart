@@ -36,7 +36,7 @@ function Register() {
             () => minLength(password, 6, "Password")
         );
 
-        const confirmError - matches(confirmPassword, password, "Passwords");
+        const confirmError = matches(confirmPassword, password, "Passwords");
 
         setErrors({
             name: nameError,
