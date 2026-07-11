@@ -34,8 +34,15 @@ export function QueueProvider({ children }) {
     setActiveTicketId(null);
   };
 
+  // admin can open/close a service queue (used by Admin Dashboard - David)
+  const toggleServiceOpen = (serviceId) => {
+    setServices(services.map((s) =>
+      s.id === serviceId ? { ...s, open: !s.open } : s
+    ));
+  };
+
   return (
-    <QueueContext.Provider value={{ queues, services, joinQueue, leaveQueue, activeTicketId }}>
+    <QueueContext.Provider value={{ queues, services, joinQueue, leaveQueue, activeTicketId, toggleServiceOpen }}>
       {children}
     </QueueContext.Provider>
   );
