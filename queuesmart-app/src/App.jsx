@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import { QueueProvider } from "./contexts/QueueContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
 
 import Dashboard from "./pages/Dashboard";
 import JoinQueue from "./pages/JoinQueue";
@@ -11,8 +13,11 @@ import QueueManagement from "./pages/QueueManagement";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+
 function App() {
   return (
+    <QueueProvider>
+    <NotificationProvider>
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -27,6 +32,8 @@ function App() {
         <Route path="*" element={<h1>404 — Page Not Found</h1>} />
       </Routes>
     </Layout>
+    </NotificationProvider>
+    </QueueProvider>
   );
 }
 

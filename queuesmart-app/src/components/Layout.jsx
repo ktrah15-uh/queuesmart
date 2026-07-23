@@ -1,6 +1,10 @@
 import Navbar from "./Navbar";
+import { useNotifications } from "../contexts/NotificationContext";
+import "./NotificationBell.css";
 
 function Layout({ children }) {
+  const { toast } = useNotifications();
+
     return (
         <div>
       <Navbar />
@@ -13,6 +17,9 @@ function Layout({ children }) {
       >
         {children}
       </main>
+
+      {/* toast popup for new notifications - David (member 3) */}
+      {toast && <div className="toast">🔔 {toast}</div>}
     </div>
     );
 }
