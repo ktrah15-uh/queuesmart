@@ -13,6 +13,7 @@ const serviceRoutes = require('./modules/services/services.routes');
 const queueRoutes = require('./modules/queue/queue.routes');
 const notificationRoutes = require('./modules/notifications/notifications.routes');
 const historyRoutes = require('./modules/history/history.routes');
+const authRoutes = require('./modules/auth/auth.routes');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/auth', authRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
