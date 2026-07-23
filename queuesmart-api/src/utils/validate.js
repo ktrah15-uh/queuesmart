@@ -103,3 +103,40 @@ function checkField(name, rawValue, rule) {
       return { value };
   }
 }
+
+/**
+ * Validates an object against a schema.
+ * Returns { valid, value, fields } where fields maps fieldName -> error message.
+ */
+function validate(schema, body) {
+  const source = body && typeof body === 'object' ? body : {};
+  const value = {};
+  const fields = {};
+
+  for (const [name, rule] of Object.entries(schema)) {
+    const result = checkField(name, source[name], rule);
+    if (result.error) fields[name] = result.error;
+    else if (!result.skip) value[name] = result.value;
+  }
+
+  return { valid: Object.keys(fields).length === 0, value, fields };
+}
+
+/**
+ * Express middleware. On success puts the cleaned data on req.data.
+ * Use req.data in your handler, NOT req.body - req.data is trimmed and typed.
+ *
+ *   router.post('/', validateBody(createServiceSchema), (req, res) => {
+ *     const { name, expectedDuration } = req.data;
+ *   });
+ */
+function validateBody(schema) {
+  return (req, res, next) => {
+    const { valid, value, fields } = validate(schema, req.body);
+    if (!valid) return next(new ValidationError(fields));
+    req.data = value;
+    next();
+  };
+}
+
+module.exports = { validate, validateBody, ValidationError, ApiError, EMAIL_RE };
