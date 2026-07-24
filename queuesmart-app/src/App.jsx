@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import { AuthProvider } from "./contexts/AuthContext";
 import { QueueProvider } from "./contexts/QueueContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 
@@ -16,6 +17,7 @@ import Register from "./pages/Register";
 
 function App() {
   return (
+    <AuthProvider>
     <QueueProvider>
     <NotificationProvider>
     <Layout>
@@ -34,6 +36,7 @@ function App() {
     </Layout>
     </NotificationProvider>
     </QueueProvider>
+    </AuthProvider>
   );
 }
 

@@ -9,6 +9,7 @@ import {
     matches,
     firstError,
 } from "../validation/validators";
+import { useAuth } from "../contexts/AuthContext";
 
 function Register() {
     const [name, setName] = useState("");
@@ -22,20 +23,25 @@ function Register() {
         password: "",
         confirmPassword: "",
     });
+    const [formError, setFormError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
 
+    const { register } = useAuth();
     const navigate = useNavigate();
 
-    function handleSubmit(event) {
+    async function handleSubmit(event) {
         event.preventDefault();
+        setFormError("");
 
-        const nameError = required(name, "Full name");
+        const nameError = firstError(
+            () => required(name, "Full name"),
+            () => minLength(name, 2, "Full name")
+        );
         const emailError = validateEmail(emailValue);
-
         const passwordError = firstError(
             () => required(password, "Password"),
-            () => minLength(password, 6, "Password")
+            () => minLength(password, 8, "Password")
         );
-
         const confirmError = matches(confirmPassword, password, "Passwords");
 
         setErrors({
@@ -45,20 +51,42 @@ function Register() {
             confirmPassword: confirmError,
         });
 
-        if (
-            nameError === "" &&
-            emailError === "" &&
-            passwordError === "" &&
-            confirmError === ""
-        ) {
-            alert("Registration successful (mock).");
-            navigate("/login");
+        if (nameError || emailError || passwordError || confirmError) return;
+
+        setSubmitting(true);
+        try {
+            await register(name, emailValue, password);
+            navigate("/");
+        } catch (err) {
+            if (err.code === "VALIDATION_ERROR") {
+                setErrors((prev) => ({
+                    ...prev,
+                    name: err.fields.name || "",
+                    email: err.fields.email || "",
+                    password: err.fields.password || "",
+                }));
+            } else if (err.code === "EMAIL_TAKEN") {
+                setErrors((prev) => ({
+                    ...prev,
+                    email: "An account with this email already exists.",
+                }));
+            } else {
+                setFormError("Could not reach the server. Is the backend running?");
+            }
+        } finally {
+            setSubmitting(false);
         }
     }
 
     return (
         <div style={{ maxWidth: "400px", margin: "0 auto" }}>
             <h1>Create Account</h1>
+
+            {formError && (
+                <p style={{ color: "var(--color-danger, #c00)" }} role="alert">
+                    {formError}
+                </p>
+            )}
 
             <form onSubmit={handleSubmit} noValidate>
                 <FormInput
@@ -82,13 +110,24 @@ function Register() {
                 <FormInput
                     label="Password"
                     type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    error={errors.password}
+                    placeholder="At least 8 characters"
+                />
+
+                <FormInput
+                    label="Confirm Password"
+                    type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     error={errors.confirmPassword}
                     placeholder="Re-enter your password"
                 />
 
-                <Button type="submit">Create Account</Button>
+                <Button type="submit" disabled={submitting}>
+                    {submitting ? "Creating account…" : "Create Account"}
+                </Button>
             </form>
 
             <p style={{ marginTop: "var(--space-md)", color: "var(--color-text-muted)" }}>
