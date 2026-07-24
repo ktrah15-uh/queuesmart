@@ -1,11 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQueue } from "../contexts/QueueContext";
-import { useNotifications } from "../contexts/NotificationContext";
 import Button from "../components/Button";
-
-// Admin Dashboard - overview of every service and its queue
-// written by: David Dick (member 3)
-// creating/editing services is on Service Management (member 4's part)
+import { useAuth } from "../contexts/AuthContext";
+import { useNotifications } from "../contexts/NotificationContext";
+import { historyApi, queueApi, servicesApi } from "../api/client";
 
 function PriorityBadge({ level }) {
   let color = "var(--color-text-muted)";
@@ -32,25 +30,99 @@ function PriorityBadge({ level }) {
 }
 
 function AdminDashboard() {
-  const { services, queues, toggleServiceOpen } = useQueue();
+  const { isLoggedIn, isAdmin, loading: authLoading } = useAuth();
   const { addNotification } = useNotifications();
+  const [services, setServices] = useState([]);
+  const [waitingByService, setWaitingByService] = useState({});
+  const [historyStats, setHistoryStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // add up everyone waiting across all the services
-  const totalWaiting = queues.filter((q) => q.status === "waiting").length;
-  const openCount = services.filter((s) => s.open !== false).length;
+  async function loadDashboard() {
+    setLoading(true);
+    setError("");
+    try {
+      const list = await servicesApi.list();
+      setServices(list || []);
 
-  // admin quick action: open or close a queue
-  function handleToggleQueue(id) {
-    console.log("toggling queue for service", id);
+      const waitingMap = {};
+      for (let i = 0; i < list.length; i++) {
+        try {
+          const tickets = await queueApi.adminView(list[i].id);
+          let waiting = 0;
+          for (let j = 0; j < tickets.length; j++) {
+            if (tickets[j].status === "waiting") waiting = waiting + 1;
+          }
+          waitingMap[list[i].id] = waiting;
+        } catch (err) {
+          waitingMap[list[i].id] = 0;
+        }
+      }
+      setWaitingByService(waitingMap);
+
+      try {
+        const stats = await historyApi.stats();
+        setHistoryStats(stats);
+      } catch (err) {
+        setHistoryStats(null);
+      }
+    } catch (err) {
+      setError(err.message || "could not load admin dashboard");
+      setServices([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isLoggedIn || !isAdmin) {
+      setLoading(false);
+      return;
+    }
+    loadDashboard();
+  }, [isLoggedIn, isAdmin, authLoading]);
+
+  let totalWaiting = 0;
+  for (const id in waitingByService) {
+    totalWaiting = totalWaiting + waitingByService[id];
+  }
+  const openCount = services.filter((s) => s.isOpen !== false).length;
+
+  async function handleToggleQueue(id) {
     const svc = services.find((s) => s.id === id);
     if (!svc) return;
 
-    const wasOpen = svc.open !== false;
-    toggleServiceOpen(id);
+    const wasOpen = svc.isOpen !== false;
+    try {
+      const updated = await servicesApi.update(id, { isOpen: !wasOpen });
+      setServices((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      addNotification(
+        "Queue for " + svc.name + " is now " + (wasOpen ? "closed" : "open"),
+        "queue_status"
+      );
+    } catch (err) {
+      alert(err.message || "could not update service");
+    }
+  }
 
-    // this counts as a "queue status changed" notification from the assignment
-    addNotification(
-      "Queue for " + svc.name + " is now " + (wasOpen ? "closed" : "open")
+  if (authLoading || loading) {
+    return (
+      <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+        <h1>Admin Dashboard</h1>
+        <p style={{ color: "var(--color-text-muted)" }}>loading...</p>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn || !isAdmin) {
+    return (
+      <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+        <h1>Admin Dashboard</h1>
+        <p style={{ color: "var(--color-text-muted)" }}>
+          Admin login required. <Link to="/login">Log in</Link> with an admin account.
+        </p>
+      </div>
     );
   }
 
@@ -61,7 +133,10 @@ function AdminDashboard() {
         Overview of every service and its queue
       </p>
 
-      {/* quick stats row */}
+      {error && (
+        <p style={{ color: "var(--color-error)", marginBottom: "var(--space-md)" }}>{error}</p>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -84,9 +159,14 @@ function AdminDashboard() {
           <div style={statNumStyle}>{services.length}</div>
           <div>total services</div>
         </div>
+        {historyStats && (
+          <div style={statBoxStyle}>
+            <div style={statNumStyle}>{historyStats.totalVisits}</div>
+            <div>past visits</div>
+          </div>
+        )}
       </div>
 
-      {/* services table */}
       <div
         style={{
           background: "var(--color-surface)",
@@ -110,10 +190,8 @@ function AdminDashboard() {
           </thead>
           <tbody>
             {services.map((s) => {
-              const waiting = queues.filter(
-                (q) => q.serviceId === s.id && q.status === "waiting"
-              ).length;
-              const isOpen = s.open !== false;
+              const waiting = waitingByService[s.id] || 0;
+              const isOpen = s.isOpen !== false;
 
               return (
                 <tr key={s.id}>
@@ -151,14 +229,19 @@ function AdminDashboard() {
             })}
           </tbody>
         </table>
+
+        {services.length === 0 && (
+          <p style={{ color: "var(--color-text-muted)", textAlign: "center", padding: "var(--space-md)" }}>
+            no services yet — create some in Service Management
+          </p>
+        )}
       </div>
 
       <p style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)", marginBottom: "var(--space-lg)" }}>
-        * est. wait = people waiting × expected duration (same simple formula from our A1).
+        * est. wait = people waiting × expected duration.
         creating/editing services is on the Service Management screen.
       </p>
 
-      {/* links to the other admin screens */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
         <div
           style={{

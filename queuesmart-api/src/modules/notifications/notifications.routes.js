@@ -1,24 +1,53 @@
 /**
- * QueueSmart - Notifications. OWNER: DAVID.
- * Mounted at /api/notifications. Replace the 501 below with real routes.
- *
- * A3 requires no real email/SMS - push objects into store.notifications and
- * return them to the front end. Please export something like
- * notify(userId, type, message) so Alan can call it when a user joins a queue
- * or is close to being served, and note it in API_CONTRACT.md.
- *
- * Reuse:
- *   const { validateBody, ApiError } = require('../../utils/validate');
- *   const { requireAuth } = require('../../middleware/auth');
- *   const { store, nextId } = require('../../data/store');  // store.notifications
+ * QueueSmart - Notification routes. David.
+ * Mounted at /api/notifications
  */
 
 const express = require('express');
-const { ApiError } = require('../../utils/validate');
+const { validateBody } = require('../../utils/validate');
+const { requireAuth } = require('../../middleware/auth');
+const notificationsService = require('./notifications.service');
 
 const router = express.Router();
 
-router.use((req, res, next) =>
-  next(new ApiError(501, 'NOT_IMPLEMENTED', 'Notification module not implemented yet (owner: David)')));
+const createSchema = {
+  type: { type: 'string', required: true, minLength: 1, maxLength: 50 },
+  message: { type: 'string', required: true, minLength: 1, maxLength: 500 },
+};
+
+router.get('/', requireAuth, (req, res, next) => {
+  try {
+    res.json(notificationsService.listForUser(req.user.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/', requireAuth, validateBody(createSchema), (req, res, next) => {
+  try {
+    const note = notificationsService.notify(req.user.id, req.data.type, req.data.message);
+    res.status(201).json(note);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/read-all', requireAuth, (req, res, next) => {
+  try {
+    const updated = notificationsService.markAllRead(req.user.id);
+    res.json({ updated: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/', requireAuth, (req, res, next) => {
+  try {
+    const removed = notificationsService.clearAll(req.user.id);
+    res.json({ removed: removed });
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;

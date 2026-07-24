@@ -86,3 +86,17 @@ export const queueApi = {
     adminView: (serviceId) => api.get(`/queue/admin/${serviceId}`),
     serveNext: (serviceId) => api.post(`/queue/admin/${serviceId}/serve`),
 };
+
+// --- History + Notifications (David) ---
+export const historyApi = {
+    list: () => api.get('/history'),
+    stats: () => api.get('/history/stats'),
+    create: (data) => api.post('/history', data),
+};
+
+export const notificationsApi = {
+    list: () => api.get('/notifications'),
+    create: (data) => api.post('/notifications', data),
+    markAllRead: () => api.post('/notifications/read-all'),
+    clearAll: () => api.del('/notifications'),
+};

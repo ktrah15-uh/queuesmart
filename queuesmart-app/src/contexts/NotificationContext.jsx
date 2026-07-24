@@ -1,37 +1,78 @@
-import { createContext, useContext, useState } from "react";
-import { mockNotifications } from "../mockData";
-
-// Notification state for the bell dropdown + toast popup
-// written by: David Dick (member 3)
-// TODO A3: replace mock stuff with real API / websocket updates
+import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
+import { notificationsApi } from "../api/client";
 
 const NotificationContext = createContext();
 
+function mapNote(n) {
+  return {
+    id: n.id,
+    text: n.message,
+    time: n.createdAt ? new Date(n.createdAt).toLocaleString() : "",
+    read: n.read,
+    type: n.type,
+  };
+}
+
 export function NotificationProvider({ children }) {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { isLoggedIn } = useAuth();
+  const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState(null);
 
-  // adds a notification to the bell list AND pops the toast for 3 seconds
-  function addNotification(text) {
-    const newNote = {
-      id: Date.now(),
-      text: text,
-      time: "just now",
-      read: false,
-    };
-    setNotifications((prev) => [newNote, ...prev]);
+  async function loadNotifications() {
+    if (!isLoggedIn) {
+      setNotifications([]);
+      return;
+    }
+    try {
+      const data = await notificationsApi.list();
+      setNotifications((data || []).map(mapNote));
+    } catch (err) {
+      setNotifications([]);
+    }
+  }
+
+  useEffect(() => {
+    loadNotifications();
+  }, [isLoggedIn]);
+
+  async function addNotification(text, type = "queue_update") {
     setToast(text);
-    setTimeout(() => {
-      setToast(null);
-    }, 3000);
+    setTimeout(() => setToast(null), 3000);
+
+    if (!isLoggedIn) {
+      setNotifications((prev) => [
+        { id: Date.now(), text: text, time: "just now", read: false },
+        ...prev,
+      ]);
+      return;
+    }
+
+    try {
+      const note = await notificationsApi.create({ type: type, message: text });
+      setNotifications((prev) => [mapNote(note), ...prev]);
+    } catch (err) {
+      setNotifications((prev) => [
+        { id: Date.now(), text: text, time: "just now", read: false },
+        ...prev,
+      ]);
+    }
   }
 
-  function markAllRead() {
+  async function markAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    if (!isLoggedIn) return;
+    try {
+      await notificationsApi.markAllRead();
+    } catch (err) {}
   }
 
-  function clearAll() {
+  async function clearAll() {
     setNotifications([]);
+    if (!isLoggedIn) return;
+    try {
+      await notificationsApi.clearAll();
+    } catch (err) {}
   }
 
   return (

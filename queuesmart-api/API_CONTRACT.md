@@ -134,6 +134,60 @@ Service functions for Andres to call directly:
 
 Wait-time estimate (A3): `peopleAhead * service.expectedDuration`.
 
-## Notifications & History — David
+## Notifications & History — David (implemented)
 
-TODO
+### History HTTP
+
+| Method | Path | Auth | Body | Success |
+|--------|------|------|------|---------|
+| GET | `/history` | Bearer | — | 200 array of history rows |
+| GET | `/history/stats` | Bearer + **admin** | — | 200 stats object |
+| POST | `/history` | Bearer | `serviceName, outcome, serviceId?, joinedAt?` | 201 history row |
+
+History row:
+
+    { "id": 1, "userId": 1, "serviceId": 2, "serviceName": "IT Help Desk",
+      "joinedAt": "2026-07-01T10:00:00.000Z", "endedAt": "2026-07-01T10:20:00.000Z",
+      "outcome": "served" }
+
+`outcome` must be `served` | `left` | `no-show`.
+
+Stats object:
+
+    { "totalVisits": 3,
+      "byOutcome": { "served": 2, "left": 1, "no-show": 0 },
+      "byService": [{ "serviceName": "IT Help Desk", "count": 2 }] }
+
+Service helper for Alan to call when a queue visit ends:
+
+```js
+const historyService = require('../history/history.service');
+historyService.recordHistory({
+  userId, serviceId, serviceName, joinedAt, outcome // served | left | no-show
+});
+```
+
+### Notifications HTTP
+
+| Method | Path | Auth | Body | Success |
+|--------|------|------|------|---------|
+| GET | `/notifications` | Bearer | — | 200 array of notifications |
+| POST | `/notifications` | Bearer | `type, message` | 201 notification |
+| POST | `/notifications/read-all` | Bearer | — | 200 `{ updated }` |
+| DELETE | `/notifications` | Bearer | — | 200 `{ removed }` |
+
+Notification object:
+
+    { "id": 1, "userId": 1, "type": "almost_your_turn",
+      "message": "Almost your turn!", "createdAt": "2026-07-24T14:02:11.000Z",
+      "read": false }
+
+No real email/SMS in A3 — objects are stored in memory and returned to the front end.
+
+Service helper for Alan to call on join / near serving:
+
+```js
+const { notify } = require('../notifications/notifications.service');
+notify(userId, 'queue_joined', 'You joined Academic Advising');
+notify(userId, 'almost_your_turn', 'Head to the desk soon');
+```

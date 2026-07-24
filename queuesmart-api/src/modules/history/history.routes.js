@@ -1,24 +1,51 @@
 /**
- * QueueSmart - History. OWNER: DAVID.
- * Mounted at /api/history. Replace the 501 below with real routes.
- *
- * Records a row in store.history when a queue entry ends (served / left /
- * no-show) so the A2 History screen and the admin usage stats have data.
- *
- * Reuse:
- *   const { validateBody, ApiError } = require('../../utils/validate');
- *   const { requireAuth, requireRole } = require('../../middleware/auth');
- *   const { store, nextId } = require('../../data/store');  // store.history
- *
- * requireRole('admin') on the stats endpoint - students shouldn't see it.
+ * QueueSmart - History routes. David.
+ * Mounted at /api/history
  */
 
 const express = require('express');
-const { ApiError } = require('../../utils/validate');
+const { validateBody } = require('../../utils/validate');
+const { requireAuth, requireRole } = require('../../middleware/auth');
+const historyService = require('./history.service');
 
 const router = express.Router();
 
-router.use((req, res, next) =>
-  next(new ApiError(501, 'NOT_IMPLEMENTED', 'History module not implemented yet (owner: David)')));
+const recordSchema = {
+  serviceId: { type: 'integer', required: false, min: 1 },
+  serviceName: { type: 'string', required: true, minLength: 1, maxLength: 100 },
+  joinedAt: { type: 'string', required: false, maxLength: 40 },
+  outcome: { type: 'enum', required: true, values: ['served', 'left', 'no-show'] },
+};
+
+router.get('/', requireAuth, (req, res, next) => {
+  try {
+    res.json(historyService.listForUser(req.user.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/stats', requireAuth, requireRole('admin'), (req, res, next) => {
+  try {
+    res.json(historyService.getStats());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/', requireAuth, validateBody(recordSchema), (req, res, next) => {
+  try {
+    const entry = historyService.recordHistory({
+      userId: req.user.id,
+      serviceId: req.data.serviceId,
+      serviceName: req.data.serviceName,
+      joinedAt: req.data.joinedAt,
+      outcome: req.data.outcome,
+    });
+    res.status(201).json(entry);
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;
