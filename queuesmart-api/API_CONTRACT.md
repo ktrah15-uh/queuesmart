@@ -71,9 +71,37 @@ Errors:
 | 401 | `INVALID_CREDENTIALS` | wrong email *or* wrong password (same message either way, deliberately) |
 | 404 | `NOT_FOUND` | `/auth/me` with a token for a deleted user |
 
-## Services — Andres
+## Services — Andres (implemented)
 
-TODO
+| Method | Path | Auth | Body / Params | Success |
+|--------|------|------|----------------|---------|
+| GET | `/services` | Bearer | — | 200 array of services |
+| GET | `/services/:id` | Bearer | URL param | 200 service |
+| POST | `/services` | Bearer + **admin** | `name, description, expectedDuration, priority?` | 201 service |
+| PUT | `/services/:id` | Bearer + **admin** | any subset of `name, description, expectedDuration, priority, isOpen` | 200 service |
+| DELETE | `/services/:id` | Bearer + **admin** | URL param | 200 `{ message }` |
+
+`priority` defaults to `medium` on create if omitted. New services always start `isOpen: true`;
+close/reopen a service through `PUT` with `{ isOpen: false }` / `{ isOpen: true }`.
+
+Service object:
+
+    { "id": 1, "name": "Financial Aid Advising", "description": "...",
+      "expectedDuration": 15, "priority": "high", "isOpen": true,
+      "createdAt": "2026-07-23T22:59:14.000Z" }
+
+Rules: name 2–100 chars, description ≤500 chars, expectedDuration 1–480 (minutes),
+priority one of `low`/`medium`/`high`.
+
+Errors:
+| Status | Code | When |
+|--------|------|------|
+| 400 | `VALIDATION_ERROR` | bad or missing fields |
+| 404 | `NOT_FOUND` | no service with that id |
+| 409 | `CONFLICT` | tried to delete a service with people still waiting in its queue |
+
+Used directly by Alan's queue module: `store.services.find(s => s.id === serviceId)` for
+`expectedDuration`/`priority` when a ticket is created (see `queue.service.js`).
 
 ## Queue — Alan
 
