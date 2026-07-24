@@ -12,7 +12,8 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "collectCoverageFrom": ["src/**/*.js"]
+    "collectCoverageFrom": ["src/**/*.js"],
+    "coveragePathIgnorePatterns": ["/node_modules/", "\\.test\\.js$"]
   },
   "keywords": [],
   "author": "",
