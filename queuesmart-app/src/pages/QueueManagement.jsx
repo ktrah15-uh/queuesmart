@@ -1,68 +1,72 @@
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import Button from "../components/Button";
-import FormInput from "../components/FormInput";
+import { useAuth } from "../contexts/AuthContext";
+import { servicesApi, queueApi } from "../api/client";
 
-function QueueManagement() {
-  const [services] = useState([
-    { id: "s1", name: "General Consultation" },
-    { id: "s2", name: "Urgent Support" },
-    { id: "s3", name: "Billing Inquiry" }
-  ]);
+function formatTime(isoString) {
+  return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
-  const [selectedServiceId, setSelectedServiceId] = useState("s1");
+function QueueManagementContent() {
+  const [services, setServices] = useState([]);
+  const [selectedServiceId, setSelectedServiceId] = useState(null);
+  const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [serving, setServing] = useState(false);
 
-  const [queues, setQueues] = useState({
-    "s1": [
-      { id: "u1", name: "Alice Johnson", email: "alice@example.com", joinedAt: "10:00 AM" },
-      { id: "u2", name: "Bob Smith", email: "bob@example.com", joinedAt: "10:05 AM" },
-      { id: "u3", name: "Charlie Davis", email: "charlie@example.com", joinedAt: "10:12 AM" }
-    ],
-    "s2": [
-      { id: "u4", name: "Diana Prince", email: "diana@example.com", joinedAt: "09:45 AM" }
-    ],
-    "s3": []
-  });
-
-  const currentQueue = queues[selectedServiceId] || [];
-
-  const handleServeNext = () => {
-    if (currentQueue.length === 0) return;
-    
-    // Simulate serving next
-    const servedUser = currentQueue[0];
-    alert(`Now serving: ${servedUser.name}`);
-    
-    setQueues({
-      ...queues,
-      [selectedServiceId]: currentQueue.slice(1)
-    });
-  };
-
-  const handleMoveUp = (index) => {
-    if (index === 0) return;
-    const newQueue = [...currentQueue];
-    const temp = newQueue[index - 1];
-    newQueue[index - 1] = newQueue[index];
-    newQueue[index] = temp;
-    setQueues({ ...queues, [selectedServiceId]: newQueue });
-  };
-
-  const handleMoveDown = (index) => {
-    if (index === currentQueue.length - 1) return;
-    const newQueue = [...currentQueue];
-    const temp = newQueue[index + 1];
-    newQueue[index + 1] = newQueue[index];
-    newQueue[index] = temp;
-    setQueues({ ...queues, [selectedServiceId]: newQueue });
-  };
-
-  const handleRemove = (index) => {
-    const user = currentQueue[index];
-    if (window.confirm(`Are you sure you want to remove ${user.name} from the queue?`)) {
-      const newQueue = currentQueue.filter((_, i) => i !== index);
-      setQueues({ ...queues, [selectedServiceId]: newQueue });
+  const loadQueue = useCallback(async (serviceId) => {
+    try {
+      const data = await queueApi.adminView(serviceId);
+      setQueue(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
     }
-  };
+  }, []);
+
+  // Initial load: fetch services, then load the queue for whichever one is
+  // selected first. Deliberately not split into a second effect keyed on
+  // selectedServiceId - selecting a service is a user action, so it re-fetches
+  // from the event handler below instead of being "synchronized" via an effect.
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await servicesApi.list();
+        setServices(data);
+        if (data.length > 0) {
+          setSelectedServiceId(data[0].id);
+          await loadQueue(data[0].id);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadQueue]);
+
+  async function handleSelectService(serviceId) {
+    setSelectedServiceId(serviceId);
+    await loadQueue(serviceId);
+  }
+
+  async function handleServeNext() {
+    if (queue.length === 0) return;
+    setServing(true);
+    try {
+      const result = await queueApi.serveNext(selectedServiceId);
+      alert(`Now serving ticket #${result.ticket.id}`);
+      await loadQueue(selectedServiceId);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setServing(false);
+    }
+  }
+
+  const selectedService = services.find((s) => s.id === selectedServiceId);
 
   return (
     <div style={{ maxWidth: "800px", margin: "0 auto" }}>
@@ -71,86 +75,99 @@ function QueueManagement() {
       </div>
 
       <div style={{ padding: "var(--space-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius)", marginBottom: "var(--space-lg)", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "var(--space-md)" }}>
-        
+
         <div className="form-input" style={{ marginBottom: 0, flex: 1, minWidth: "200px" }}>
           <label className="form-input-label">Select Service to Manage:</label>
-          <select 
+          <select
             className="form-input-field"
-            value={selectedServiceId}
-            onChange={(e) => setSelectedServiceId(e.target.value)}
+            value={selectedServiceId ?? ""}
+            onChange={(e) => handleSelectService(Number(e.target.value))}
           >
+            {services.length === 0 && <option value="">No services yet</option>}
             {services.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
         </div>
-        
-        <Button 
+
+        <Button
           type="button"
-          onClick={handleServeNext} 
-          disabled={currentQueue.length === 0}
+          onClick={handleServeNext}
+          disabled={queue.length === 0 || serving}
         >
-          Serve Next User
+          {serving ? "Serving..." : "Serve Next User"}
         </Button>
       </div>
 
+      {error && <p style={{ color: "var(--color-error)" }}>{error}</p>}
+
       <div>
-        <h2 style={{ marginBottom: "var(--space-md)" }}>Current Queue ({currentQueue.length})</h2>
-        
-        {currentQueue.length === 0 ? (
+        <h2 style={{ marginBottom: "var(--space-md)" }}>
+          Current Queue {selectedService ? `for ${selectedService.name}` : ""} ({queue.length})
+        </h2>
+
+        {loading ? (
+          <p style={{ color: "var(--color-text-muted)" }}>Loading queue...</p>
+        ) : services.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "var(--space-xl) 0", color: "var(--color-text-muted)", fontStyle: "italic", border: "1px dashed var(--color-border)", borderRadius: "var(--radius)" }}>
+            <p>No services yet — create one in Service Management first.</p>
+          </div>
+        ) : queue.length === 0 ? (
           <div style={{ textAlign: "center", padding: "var(--space-xl) 0", color: "var(--color-text-muted)", fontStyle: "italic", border: "1px dashed var(--color-border)", borderRadius: "var(--radius)" }}>
             <p>The queue is currently empty.</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-            {currentQueue.map((user, index) => (
-              <div key={user.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-md)", background: "var(--color-surface)", borderRadius: "var(--radius)" }}>
-                
+            {queue.map((ticket, index) => (
+              <div key={ticket.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-md)", background: "var(--color-surface)", borderRadius: "var(--radius)" }}>
+
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
                   <div style={{ background: "var(--color-primary)", color: "white", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", fontWeight: "bold" }}>
                     {index + 1}
                   </div>
                   <div>
-                    <h3 style={{ margin: "0 0 4px 0" }}>{user.name}</h3>
-                    <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>{user.email} • Joined: {user.joinedAt}</p>
+                    <h3 style={{ margin: "0 0 4px 0" }}>Ticket #{ticket.id} · User #{ticket.userId}</h3>
+                    <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>
+                      Joined: {formatTime(ticket.joinedAt)} · {ticket.priority} priority
+                    </p>
                   </div>
                 </div>
-                
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <Button 
-                    type="button" 
-                    variant="secondary"
-                    onClick={() => handleMoveUp(index)}
-                    disabled={index === 0}
-                    style={{ padding: "4px 8px" }}
-                  >
-                    ↑
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="secondary"
-                    onClick={() => handleMoveDown(index)}
-                    disabled={index === currentQueue.length - 1}
-                    style={{ padding: "4px 8px" }}
-                  >
-                    ↓
-                  </Button>
-                  <Button 
-                    type="button" 
-                    onClick={() => handleRemove(index)}
-                    style={{ padding: "4px 8px", background: "var(--color-error)" }}
-                  >
-                    ✕
-                  </Button>
-                </div>
-
               </div>
             ))}
           </div>
         )}
       </div>
+
+      <p style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)", marginTop: "var(--space-lg)" }}>
+        Queue order comes straight from the backend (oldest arrival first). Serving the next
+        user removes them from this list.
+      </p>
     </div>
   );
+}
+
+function QueueManagement() {
+  const { loading, isLoggedIn, isAdmin } = useAuth();
+
+  if (loading) {
+    return <p style={{ textAlign: "center", marginTop: "var(--space-xl)", color: "var(--color-text-muted)" }}>Loading...</p>;
+  }
+
+  if (!isLoggedIn || !isAdmin) {
+    return (
+      <div style={{ maxWidth: "400px", margin: "var(--space-xl) auto", textAlign: "center" }}>
+        <h2>Admin sign-in required</h2>
+        <p style={{ color: "var(--color-text-muted)" }}>
+          {isLoggedIn
+            ? "Your account doesn't have admin access."
+            : "Please log in with an admin account to manage queues."}
+        </p>
+        <Link to="/login">Go to Login</Link>
+      </div>
+    );
+  }
+
+  return <QueueManagementContent />;
 }
 
 export default QueueManagement;

@@ -71,3 +71,18 @@ export const authApi = {
     login: (data) => api.post('/auth/login', data),
     me: () => api.get('/auth/me'),
 };
+
+// --- Services (Andres) ---
+export const servicesApi = {
+    list: () => api.get('/services'),
+    get: (id) => api.get(`/services/${id}`),
+    create: (data) => api.post('/services', data),
+    update: (id, data) => api.put(`/services/${id}`, data),
+    remove: (id) => api.del(`/services/${id}`),
+};
+
+// --- Queue admin actions (Andres, calling into Alan's queue module) ---
+export const queueApi = {
+    adminView: (serviceId) => api.get(`/queue/admin/${serviceId}`),
+    serveNext: (serviceId) => api.post(`/queue/admin/${serviceId}/serve`),
+};
