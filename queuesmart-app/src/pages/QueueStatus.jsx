@@ -8,7 +8,7 @@ function QueueStatus() {
   const { queues, services, leaveQueue, activeTicketId } = useQueue();
 
   // find ticket object in the global array
-  const myTicket = queues.find((q) => q.queueId === activeTicketId);
+  const myTicket = queues.find((q) => q.id === activeTicketId);
 
 // if ticket is not found, display a message to the user and provide a button to return to the dashboard
   if (!myTicket) {
@@ -23,7 +23,7 @@ function QueueStatus() {
   //
   const service = services.find((s) => s.id === myTicket.serviceId);
 // get estimated wait time -1 due to the fact a user is about to be served
-  const waitTime = (myTicket.position - 1) * service.expectedDuration;
+  const waitTime = (myTicket.position - 1) * (service?.expectedDuration || 15);
 
   //if a user leaves the queue, remove them from the queue and navigate back to the dashboard
   const handleLeave = () => {

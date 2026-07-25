@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from "react";
 import { mockServices, mockQueues } from "../mockData";
+import { api } from "../api/client";
 
 const QueueContext = createContext();
 
@@ -13,25 +14,33 @@ export function QueueProvider({ children }) {
 
   const[activeTicketId, setActiveTicketId] = useState(null);
 //adds new user to the queue
-  const joinQueue = (serviceId) => {
-    const newTicket = {
-      queueId: `ticket-${Date.now()}`, 
-      serviceId,
-      // calculates position in a line 
-      position: queues.filter(q => q.serviceId === serviceId).length + 1,
-      status: "waiting"
-    };
-    //puts ticket into line
-    setQueues([...queues, newTicket]);
-    setActiveTicketId(newTicket.queueId);
-    return newTicket.queueId;
+  const joinQueue = async (serviceId) => {
+try {
+
+    const data = await api.post('/queue/join', { serviceId });
+
+    if (data.ticket){
+      setQueues([...queues, data.ticket]);
+      setActiveTicketId(data.ticket.id);
+      return data.ticket.id;
+    }
+  } catch(error){
+    alert(error.message || "Could not join queue");
+    console.error("Error joining queue:", error);
+  }
   };
 //removes user from the queue
-  const leaveQueue = (queueId) => {
-    const updatedLine = queues.filter(q => q.queueId !== queueId);
-    setQueues(updatedLine);
+  const leaveQueue = async (queueId) => {
+     try {
+      await api.post('/queue/leave', {queueEntryId: queueId });
 
-    setActiveTicketId(null);
+      const updatedLine = queues.filter(q => q.id !== queueId && q.queueId !== queueId);
+      setQueues(updatedLine);
+      setActiveTicketId(null);
+     } catch (error) {
+      alert(error.message || "Could not leave queue");
+      console.error("Error leaving queue:", error);
+     }
   };
 
   // admin can open/close a service queue (used by Admin Dashboard - David)

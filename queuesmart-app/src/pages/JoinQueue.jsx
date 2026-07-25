@@ -12,7 +12,7 @@ function JoinQueue() {
   const[selectedServiceId, setSelectedServiceId] = useState("");
 // if a user already has an active ticket, prevent them from getting another 
   if (activeTicketId) {
-    const myTicket = queues.find(q => q.queueId === activeTicketId);
+    const myTicket = queues.find(q => q.id === activeTicketId);
     const service = services.find(s => s.id === myTicket?.serviceId);
     
     return (
@@ -40,9 +40,9 @@ function JoinQueue() {
   const estimatedWait = selectedService ? currentLineLength * selectedService.expectedDuration : 0;
 
   //
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (selectedServiceId) {
-      joinQueue(selectedServiceId);
+      await joinQueue(selectedServiceId);
       //send to tracking page after joining queue
       navigate("/status"); 
     }
@@ -59,7 +59,7 @@ function JoinQueue() {
       {/* Dropdown menu for selecting a service */}
       <select 
         value={selectedServiceId} 
-        onChange={(e) => setSelectedServiceId(e.target.value)}
+        onChange={(e) => setSelectedServiceId(Number(e.target.value))}
         style={{ 
           width: "100%", 
           padding: "var(--space-md)", 
