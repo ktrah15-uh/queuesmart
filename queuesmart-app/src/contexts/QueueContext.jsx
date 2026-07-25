@@ -1,5 +1,4 @@
-import { createContext, useContext, useState } from "react";
-import { mockServices, mockQueues } from "../mockData";
+import { createContext, useContext, useState, useEffect } from "react";
 import { api } from "../api/client";
 
 const QueueContext = createContext();
@@ -7,34 +6,47 @@ const QueueContext = createContext();
 export function QueueProvider({ children }) {
 
   // Load the fake users into our state
-  const [queues, setQueues] = useState(mockQueues);
+  const [queues, setQueues] = useState([]);
   
   //servies available for users to join
-  const [services, setServices] = useState(mockServices);
+  const [services, setServices] = useState([]);
 
   const[activeTicketId, setActiveTicketId] = useState(null);
-//adds new user to the queue
+
+  useEffect(() => {
+    const fetchRealServices = async () => {
+      try {
+        const data = await api.get('/services');
+        setServices(data || []);
+      } catch (err) {
+        console.error("Could not fetch real services:", err);
+      }
+    };
+    fetchRealServices();
+  }, []);
+
+  //adds new user to the queue
   const joinQueue = async (serviceId) => {
-try {
+    try {
+      const data = await api.post('/queue/join', { serviceId });
 
-    const data = await api.post('/queue/join', { serviceId });
-
-    if (data.ticket){
-      setQueues([...queues, data.ticket]);
-      setActiveTicketId(data.ticket.id);
-      return data.ticket.id;
+      if (data.ticket){
+        setQueues([...queues, data.ticket]);
+        setActiveTicketId(data.ticket.id);
+        return data.ticket.id;
+      }
+    } catch(error){
+      alert(error.message || "Could not join queue");
+      console.error("Error joining queue:", error);
     }
-  } catch(error){
-    alert(error.message || "Could not join queue");
-    console.error("Error joining queue:", error);
-  }
   };
-//removes user from the queue
+
+  //removes user from the queue
   const leaveQueue = async (queueId) => {
      try {
       await api.post('/queue/leave', {queueEntryId: queueId });
 
-      const updatedLine = queues.filter(q => q.id !== queueId && q.queueId !== queueId);
+      const updatedLine = queues.filter(q => q.id !== queueId);
       setQueues(updatedLine);
       setActiveTicketId(null);
      } catch (error) {
