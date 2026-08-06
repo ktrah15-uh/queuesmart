@@ -34,6 +34,9 @@ export function NotificationProvider({ children }) {
 
   useEffect(() => {
     loadNotifications();
+    if (!isLoggedIn) return;
+    const timer = setInterval(loadNotifications, 15000);
+    return () => clearInterval(timer);
   }, [isLoggedIn]);
 
   async function addNotification(text, type = "queue_update") {

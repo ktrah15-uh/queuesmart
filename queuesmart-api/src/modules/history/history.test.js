@@ -4,16 +4,21 @@
 
 const request = require('supertest');
 const app = require('../../app');
-const { resetStore } = require('../../data/store');
+const { store, resetStore, db } = require('../../data/store');
 const { signToken } = require('../../middleware/auth');
 const historyService = require('./history.service');
 const notificationsService = require('../notifications/notifications.service');
+const queueService = require('../queue/queue.service');
 
 let userToken;
 let adminToken;
 
 beforeEach(() => {
   resetStore();
+  db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
+    .run('student@uh.edu', 'test-hash', 'user');
+  db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
+    .run('admin@uh.edu', 'test-hash', 'admin');
   userToken = signToken({ id: 1, email: 'student@uh.edu', role: 'user' });
   adminToken = signToken({ id: 2, email: 'admin@uh.edu', role: 'admin' });
 });
@@ -40,6 +45,16 @@ describe('history helpers', () => {
         outcome: 'skipped',
       })
     ).toThrow('outcome must be served, left, or no-show');
+  });
+
+  test('recordHistory rejects an unknown user', () => {
+    expect(() =>
+      historyService.recordHistory({
+        userId: 99,
+        serviceName: 'IT Help Desk',
+        outcome: 'served',
+      })
+    ).toThrow('User not found');
   });
 });
 
@@ -111,14 +126,21 @@ describe('GET /api/history/stats', () => {
       .set('Authorization', 'Bearer ' + adminToken);
     expect(allowed.status).toBe(200);
     expect(allowed.body.totalVisits).toBe(1);
+    expect(allowed.body.byOutcome.served).toBe(1);
+    expect(allowed.body.byService).toHaveLength(1);
   });
 });
 
 describe('notifications helpers', () => {
   test('notify adds a note', () => {
-    const note = notificationsService.notify(5, 'queue_joined', 'You joined');
+    const note = notificationsService.notify(1, 'queue_joined', 'You joined');
     expect(note.id).toBe(1);
-    expect(notificationsService.listForUser(5)).toHaveLength(1);
+    expect(note.read).toBe(false);
+    expect(notificationsService.listForUser(1)).toHaveLength(1);
+  });
+
+  test('notify rejects an unknown user', () => {
+    expect(() => notificationsService.notify(99, 'queue_joined', 'Hello')).toThrow('User not found');
   });
 });
 
@@ -164,6 +186,10 @@ describe('POST /api/notifications/read-all', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.updated).toBe(2);
+
+    const notes = notificationsService.listForUser(1);
+    expect(notes[0].read).toBe(true);
+    expect(notes[1].read).toBe(true);
   });
 });
 
@@ -180,5 +206,59 @@ describe('DELETE /api/notifications', () => {
     expect(res.body.removed).toBe(1);
     expect(notificationsService.listForUser(1)).toHaveLength(0);
     expect(notificationsService.listForUser(2)).toHaveLength(1);
+  });
+});
+
+describe('queue actions', () => {
+  beforeEach(() => {
+    db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
+      .run('third@uh.edu', 'test-hash', 'user');
+    store.services.push({ id: 1, name: 'IT Help Desk', expectedDuration: 10, priority: 'medium' });
+  });
+
+  test('joining a queue notifies the user', () => {
+    queueService.joinQueue(1, 1);
+
+    const notes = notificationsService.listForUser(1);
+    expect(notes).toHaveLength(2);
+    expect(notes[1].type).toBe('queue_joined');
+    expect(notes[0].type).toBe('almost_your_turn');
+  });
+
+  test('joining near the back does not send almost_your_turn', () => {
+    queueService.joinQueue(1, 1);
+    queueService.joinQueue(2, 1);
+    queueService.joinQueue(3, 1);
+
+    const notes = notificationsService.listForUser(3);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type).toBe('queue_joined');
+  });
+
+  test('serving records history and notifies the users moving up', () => {
+    queueService.joinQueue(1, 1);
+    queueService.joinQueue(2, 1);
+    queueService.joinQueue(3, 1);
+
+    queueService.serveNext(1);
+
+    const rows = historyService.listForUser(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('served');
+    expect(rows[0].serviceName).toBe('IT Help Desk');
+
+    const notes = notificationsService.listForUser(3);
+    expect(notes).toHaveLength(2);
+    expect(notes[0].type).toBe('almost_your_turn');
+  });
+
+  test('leaving records history', () => {
+    const joined = queueService.joinQueue(1, 1);
+
+    queueService.leaveQueue(1, joined.ticket.id);
+
+    const rows = historyService.listForUser(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('left');
   });
 });

@@ -6,10 +6,10 @@
  * SQLite one module at a time (see src/data/db.js for the schema).
  *
  *   MIGRATED : users  -> UserCredentials + UserProfile tables (Killian, done)
+ *   MIGRATED : notifications -> Notification (David, done)
+ *   MIGRATED : history       -> History      (David, done)
  *   TODO     : services      -> Service            (Andres)
  *   TODO     : queueEntries  -> Queue + QueueEntry (Alan)
- *   TODO     : notifications -> Notification       (David)
- *   TODO     : history       -> History            (David)
  *
  * Until your collection is migrated it keeps working exactly as it did in A3,
  * so nothing breaks while we move over. resetStore() already clears BOTH the
@@ -24,10 +24,6 @@ const store = {
 
   // Alan - queue
   queueEntries: [], // { id, serviceId, userId, priority, joinedAt, status }
-
-  // David - notifications + history
-  notifications: [], // { id, userId, type, message, createdAt, read }
-  history: [], // { id, userId, serviceId, serviceName, joinedAt, endedAt, outcome }
 };
 
 const counters = {};

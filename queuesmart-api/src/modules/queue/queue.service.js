@@ -1,5 +1,23 @@
-const { store, nextId } = require('../../data/store');  // store.queueEntries 
+const { store, nextId } = require('../../data/store');  // store.queueEntries
 const { ApiError } = require('../../utils/validate');
+const notificationsService = require('../notifications/notifications.service');
+const historyService = require('../history/history.service');
+
+const ALMOST_UP_POSITION = 2;
+
+function notifyQueueAdvance(serviceId, fromPosition) {
+    const service = store.services.find(s => s.id === serviceId);
+    const serviceName = service ? service.name : 'your service';
+    const waitingList = getQueueForService(serviceId);
+
+    for (let i = fromPosition - 1; i < waitingList.length && i < ALMOST_UP_POSITION; i++) {
+        notificationsService.notify(
+            waitingList[i].userId,
+            'almost_your_turn',
+            'You are now #' + (i + 1) + ' in line for ' + serviceName + '.'
+        );
+    }
+}
 
 // retrives array of user waiting for a individual service, sorting them by oldest entries first 
 function getQueueForService(serviceId) {
@@ -49,6 +67,19 @@ function joinQueue(userId, serviceId) {
     const position = waitingList.findIndex(ticket => ticket.id === id) + 1; // +1 because index is 0-based
     const estimatedWaitTime = calculateWaitTime(serviceId, position);
 
+    notificationsService.notify(
+        userId,
+        'queue_joined',
+        'You joined ' + service.name + ' at position #' + position + '.'
+    );
+    if (position <= ALMOST_UP_POSITION) {
+        notificationsService.notify(
+            userId,
+            'almost_your_turn',
+            'You are #' + position + ' in line for ' + service.name + '. Almost your turn!'
+        );
+    }
+
     return { ticket: entry, position, estimatedWaitTime };
 }
 
@@ -60,7 +91,21 @@ function leaveQueue(userId, queueEntryId) {
     if (entry.userId !== userId) throw new ApiError(403, 'FORBIDDEN', 'User has wrong ticket');
     if (entry.status !== 'waiting') throw new ApiError(400, 'BAD_REQUEST', 'Queue entry is not in Line');
 
+    const waitingList = getQueueForService(entry.serviceId);
+    const position = waitingList.findIndex(ticket => ticket.id === queueEntryId) + 1;
+
     entry.status = 'left';
+
+    const service = store.services.find(s => s.id === entry.serviceId);
+    historyService.recordHistory({
+        userId: entry.userId,
+        serviceId: entry.serviceId,
+        serviceName: service ? service.name : 'Unknown service',
+        joinedAt: entry.joinedAt,
+        outcome: 'left'
+    });
+    notifyQueueAdvance(entry.serviceId, position);
+
     return { message: 'Successfully left the queue.' };
 }
 
@@ -91,6 +136,17 @@ function serveNext(serviceId) {
 
     const nextUser = waitingQueue[0];
     nextUser.status = 'served';
+
+    const service = store.services.find(s => s.id === serviceId);
+    historyService.recordHistory({
+        userId: nextUser.userId,
+        serviceId: serviceId,
+        serviceName: service ? service.name : 'Unknown service',
+        joinedAt: nextUser.joinedAt,
+        outcome: 'served'
+    });
+    notifyQueueAdvance(serviceId, 1);
+
     return { message: 'Next user served.', ticket: nextUser };
 }
 

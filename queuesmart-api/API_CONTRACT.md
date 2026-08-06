@@ -158,7 +158,8 @@ Stats object:
       "byOutcome": { "served": 2, "left": 1, "no-show": 0 },
       "byService": [{ "serviceName": "IT Help Desk", "count": 2 }] }
 
-Service helper for Alan to call when a queue visit ends:
+Rows live in the SQLite `History` table. The queue module calls this helper
+automatically when a visit ends (served or left):
 
 ```js
 const historyService = require('../history/history.service');
@@ -182,9 +183,12 @@ Notification object:
       "message": "Almost your turn!", "createdAt": "2026-07-24T14:02:11.000Z",
       "read": false }
 
-No real email/SMS in A3 — objects are stored in memory and returned to the front end.
+No real email/SMS — rows live in the SQLite `Notification` table (`status`
+`sent`/`viewed` is returned as the `read` boolean). `userId` must exist in
+`UserCredentials` or `notify` throws 404.
 
-Service helper for Alan to call on join / near serving:
+The queue module calls this helper automatically on join and whenever a user
+reaches the front two spots of the line:
 
 ```js
 const { notify } = require('../notifications/notifications.service');

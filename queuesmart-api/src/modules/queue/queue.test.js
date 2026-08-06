@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../../app');
-const {store, resetStore} = require('../../data/store');
+const {store, resetStore, db} = require('../../data/store');
 const {signToken} = require('../../middleware/auth');
 const {calculateWaitTime} = require('./queue.service');
 
@@ -8,15 +8,20 @@ const {calculateWaitTime} = require('./queue.service');
 describe('Queue Management Module', () => {
     let userToken;
     let adminToken;
-    let testUserId = 'u123'
-    let testAdminId = 'a999'
+    let testUserId = 1
+    let testAdminId = 2
     let testServiceId = 1;
 
-    
+
 //runs before tests and assings mock data
     beforeEach(() => {
 
         resetStore();
+
+        db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
+            .run('student@uni.edu', 'test-hash', 'user');
+        db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
+            .run('admin@uni.edu', 'test-hash', 'admin');
 
         userToken = signToken({ id: testUserId, email: 'student@uni.edu', role: 'user'});
         adminToken = signToken({ id: testAdminId, email: 'admin@uni.edu', role: 'admin'});

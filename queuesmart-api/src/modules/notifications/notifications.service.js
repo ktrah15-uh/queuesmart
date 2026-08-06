@@ -2,8 +2,19 @@
  * QueueSmart - Notifications. David.
  */
 
-const { store, nextId } = require('../../data/store');
+const { db } = require('../../data/db');
 const { ApiError } = require('../../utils/validate');
+
+function toNote(row) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    type: row.type,
+    message: row.message,
+    createdAt: row.createdAt,
+    read: row.status === 'viewed',
+  };
+}
 
 function notify(userId, type, message) {
   if (userId === undefined || userId === null) {
@@ -16,49 +27,48 @@ function notify(userId, type, message) {
     throw new ApiError(400, 'BAD_REQUEST', 'message is required');
   }
 
-  const note = {
-    id: nextId('notifications'),
+  const user = db.prepare('SELECT id FROM UserCredentials WHERE id = ?').get(userId);
+  if (!user) {
+    throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  }
+
+  const createdAt = new Date().toISOString();
+  const info = db
+    .prepare('INSERT INTO Notification (userId, type, message, createdAt) VALUES (?, ?, ?, ?)')
+    .run(userId, type, message, createdAt);
+
+  return {
+    id: info.lastInsertRowid,
     userId: userId,
     type: type,
     message: message,
-    createdAt: new Date().toISOString(),
+    createdAt: createdAt,
     read: false,
   };
-
-  store.notifications.unshift(note);
-  return note;
 }
 
 function listForUser(userId) {
+  const rows = db
+    .prepare('SELECT * FROM Notification WHERE userId = ? ORDER BY id DESC')
+    .all(userId);
+
   const notes = [];
-  for (let i = 0; i < store.notifications.length; i++) {
-    if (store.notifications[i].userId === userId) {
-      notes.push(store.notifications[i]);
-    }
+  for (let i = 0; i < rows.length; i++) {
+    notes.push(toNote(rows[i]));
   }
   return notes;
 }
 
 function markAllRead(userId) {
-  let count = 0;
-  for (let i = 0; i < store.notifications.length; i++) {
-    if (store.notifications[i].userId === userId && store.notifications[i].read === false) {
-      store.notifications[i].read = true;
-      count = count + 1;
-    }
-  }
-  return count;
+  const info = db
+    .prepare("UPDATE Notification SET status = 'viewed' WHERE userId = ? AND status = 'sent'")
+    .run(userId);
+  return info.changes;
 }
 
 function clearAll(userId) {
-  let removed = 0;
-  for (let i = store.notifications.length - 1; i >= 0; i--) {
-    if (store.notifications[i].userId === userId) {
-      store.notifications.splice(i, 1);
-      removed = removed + 1;
-    }
-  }
-  return removed;
+  const info = db.prepare('DELETE FROM Notification WHERE userId = ?').run(userId);
+  return info.changes;
 }
 
 module.exports = { notify, listForUser, markAllRead, clearAll };

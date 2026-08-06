@@ -2,7 +2,7 @@
  * QueueSmart - History. David.
  */
 
-const { store, nextId } = require('../../data/store');
+const { db } = require('../../data/db');
 const { ApiError } = require('../../utils/validate');
 
 const OUTCOMES = ['served', 'left', 'no-show'];
@@ -18,52 +18,66 @@ function recordHistory({ userId, serviceId, serviceName, joinedAt, outcome }) {
     throw new ApiError(400, 'BAD_REQUEST', 'outcome must be served, left, or no-show');
   }
 
-  const entry = {
-    id: nextId('history'),
+  const user = db.prepare('SELECT id FROM UserCredentials WHERE id = ?').get(userId);
+  if (!user) {
+    throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  }
+
+  let knownServiceId = null;
+  if (serviceId) {
+    const service = db.prepare('SELECT id FROM Service WHERE id = ?').get(serviceId);
+    if (service) {
+      knownServiceId = service.id;
+    }
+  }
+
+  const joined = joinedAt || new Date().toISOString();
+  const ended = new Date().toISOString();
+
+  const info = db
+    .prepare(
+      'INSERT INTO History (userId, serviceId, serviceName, joinedAt, endedAt, outcome) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(userId, knownServiceId, serviceName, joined, ended, outcome);
+
+  return {
+    id: info.lastInsertRowid,
     userId: userId,
-    serviceId: serviceId || null,
+    serviceId: knownServiceId,
     serviceName: serviceName,
-    joinedAt: joinedAt || new Date().toISOString(),
-    endedAt: new Date().toISOString(),
+    joinedAt: joined,
+    endedAt: ended,
     outcome: outcome,
   };
-
-  store.history.push(entry);
-  return entry;
 }
 
 function listForUser(userId) {
-  const rows = [];
-  for (let i = 0; i < store.history.length; i++) {
-    if (store.history[i].userId === userId) {
-      rows.push(store.history[i]);
-    }
-  }
-  return rows;
+  return db.prepare('SELECT * FROM History WHERE userId = ? ORDER BY id').all(userId);
 }
 
 function getStats() {
-  const byOutcome = { served: 0, left: 0, 'no-show': 0 };
-  const serviceCounts = {};
+  const total = db.prepare('SELECT COUNT(*) AS count FROM History').get();
 
-  for (let i = 0; i < store.history.length; i++) {
-    const h = store.history[i];
-    if (byOutcome[h.outcome] !== undefined) {
-      byOutcome[h.outcome] = byOutcome[h.outcome] + 1;
+  const byOutcome = { served: 0, left: 0, 'no-show': 0 };
+  const outcomeRows = db
+    .prepare('SELECT outcome, COUNT(*) AS count FROM History GROUP BY outcome')
+    .all();
+  for (let i = 0; i < outcomeRows.length; i++) {
+    if (byOutcome[outcomeRows[i].outcome] !== undefined) {
+      byOutcome[outcomeRows[i].outcome] = outcomeRows[i].count;
     }
-    if (!serviceCounts[h.serviceName]) {
-      serviceCounts[h.serviceName] = 0;
-    }
-    serviceCounts[h.serviceName] = serviceCounts[h.serviceName] + 1;
   }
 
   const byService = [];
-  for (const name in serviceCounts) {
-    byService.push({ serviceName: name, count: serviceCounts[name] });
+  const serviceRows = db
+    .prepare('SELECT serviceName, COUNT(*) AS count FROM History GROUP BY serviceName')
+    .all();
+  for (let i = 0; i < serviceRows.length; i++) {
+    byService.push({ serviceName: serviceRows[i].serviceName, count: serviceRows[i].count });
   }
 
   return {
-    totalVisits: store.history.length,
+    totalVisits: total.count,
     byOutcome: byOutcome,
     byService: byService,
   };
