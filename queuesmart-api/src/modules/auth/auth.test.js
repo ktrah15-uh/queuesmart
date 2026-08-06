@@ -4,9 +4,25 @@
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const app = require('../../app');
-const { store, resetStore } = require('../../data/store');
+const { resetStore, db } = require('../../data/store');
 const { signToken, requireAuth, requireRole } = require('../../middleware/auth');
 const { JWT_SECRET } = require('../../config');
+const authService = require('./auth.service');
+const { SCHEMA } = require('../../data/db');
+const Database = require('better-sqlite3');
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
+
+/** How many accounts are in the database right now. */
+function countUsers() {
+    return db.prepare('SELECT COUNT(*) AS n FROM UserCredentials').get().n;
+}
+
+/** The raw UserCredentials row, hash included - tests only. */
+function credentialsRow(email) {
+    return db.prepare('SELECT * FROM UserCredentials WHERE email = ?').get(email);
+}
 
 const VALID_USER = {
     name: 'Killian Trahan',
@@ -31,7 +47,7 @@ describe('POST /api/auth/register', () => {
             emailVerified: false,
         });
         expect(typeof res.body.token).toBe('string');
-        expect(store.users).toHaveLength(1);
+        expect(countUsers()).toBe(1);
     });
 
     test('never returns the password or its hash', async () => {
@@ -44,8 +60,10 @@ describe('POST /api/auth/register', () => {
     test('stores a hash, not the plain password', async () => {
         await request(app).post('/api/auth/register').send(VALID_USER);
 
-        expect(store.users[0].passwordHash).toBeDefined();
-        expect(store.users[0].passwordHash).not.toBe('password123');
+        const row = credentialsRow('killian@uh.edu');
+        expect(row.passwordHash).toBeDefined();
+        expect(row.passwordHash).not.toBe('password123');
+        expect(row.passwordHash.startsWith('$2')).toBe(true); // a bcrypt hash
     });
 
     test('lowercases the email and defaults the role to user', async () => {
@@ -74,7 +92,7 @@ describe('POST /api/auth/register - validation', () => {
         expect(res.body.error.code).toBe('VALIDATION_ERROR');
         expect(Object.keys(res.body.error.fields).sort())
             .toEqual(['email', 'name', 'password']);
-        expect(store.users).toHaveLength(0);
+        expect(countUsers()).toBe(0);
     });
 
     test.each([
@@ -101,7 +119,7 @@ describe('POST /api/auth/register - validation', () => {
 
         expect(res.status).toBe(409);
         expect(res.body.error.code).toBe('EMAIL_TAKEN');
-        expect(store.users).toHaveLength(1);
+        expect(countUsers()).toBe(1);
     });
 
     test('treats a differently-cased email as the same account', async () => {
@@ -260,7 +278,7 @@ describe('GET /api/auth/me', () => {
 
     test('returns 404 if the account no longer exists', async () => {
         const registered = await request(app).post('/api/auth/register').send(VALID_USER);
-        store.users.length = 0;
+        db.prepare('DELETE FROM UserCredentials').run();
 
         const res = await request(app)
             .get('/api/auth/me')
@@ -354,5 +372,148 @@ describe('signToken', () => {
             .set('Authorization', `Bearer ${token}`);
 
         expect(res.status).toBe(200);
+    });
+});
+
+/* ------------------------------------------------------------------ *
+ * A4 - database layer
+ * ------------------------------------------------------------------ */
+
+describe('A4: database persistence', () => {
+    test('register writes one UserCredentials row and one UserProfile row', async () => {
+        await request(app).post('/api/auth/register').send(VALID_USER);
+
+        const credentials = db.prepare('SELECT * FROM UserCredentials').all();
+        const profiles = db.prepare('SELECT * FROM UserProfile').all();
+
+        expect(credentials).toHaveLength(1);
+        expect(profiles).toHaveLength(1);
+        expect(profiles[0].userId).toBe(credentials[0].id);
+        expect(profiles[0].fullName).toBe('Killian Trahan');
+        expect(profiles[0].email).toBe('killian@uh.edu');
+    });
+
+    test('the profile is not written when the credentials insert fails', async () => {
+        await request(app).post('/api/auth/register').send(VALID_USER);
+        await request(app)
+            .post('/api/auth/register')
+            .send({ ...VALID_USER, name: 'Someone Else' });
+
+        expect(db.prepare('SELECT COUNT(*) AS n FROM UserProfile').get().n).toBe(1);
+    });
+
+    test('a registered user can be read back out of the database after the request ends', async () => {
+        const registered = await request(app).post('/api/auth/register').send(VALID_USER);
+
+        const stored = authService.findById(registered.body.user.id);
+
+        expect(stored.email).toBe('killian@uh.edu');
+        expect(stored.name).toBe('Killian Trahan');
+    });
+
+    test('deleting the credentials row cascades to the profile', async () => {
+        await request(app).post('/api/auth/register').send(VALID_USER);
+
+        db.prepare('DELETE FROM UserCredentials WHERE email = ?').run('killian@uh.edu');
+
+        expect(db.prepare('SELECT COUNT(*) AS n FROM UserProfile').get().n).toBe(0);
+    });
+
+    test('data written to a database file is still there after reopening it', () => {
+        const file = path.join(os.tmpdir(), `queuesmart-test-${Date.now()}.db`);
+
+        const first = new Database(file);
+        first.exec(SCHEMA);
+        first.prepare(
+            `INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)`
+        ).run('persist@uh.edu', 'hashed', 'admin');
+        first.close();
+
+        const second = new Database(file);
+        const row = second.prepare('SELECT * FROM UserCredentials WHERE email = ?').get('persist@uh.edu');
+        second.close();
+        fs.rmSync(file, { force: true });
+
+        expect(row.email).toBe('persist@uh.edu');
+        expect(row.role).toBe('admin');
+    });
+});
+
+describe('A4: database constraints', () => {
+    test('the UNIQUE index rejects a duplicate email even when the service is bypassed', () => {
+        const insert = db.prepare(
+            `INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)`
+        );
+        insert.run('dupe@uh.edu', 'hash', 'user');
+
+        expect(() => insert.run('DUPE@uh.edu', 'other-hash', 'user')).toThrow(/UNIQUE/i);
+    });
+
+    test('the role column rejects a value outside user/admin', () => {
+        expect(() =>
+            db.prepare(`INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)`)
+                .run('bad@uh.edu', 'hash', 'superuser')
+        ).toThrow(/CHECK/i);
+    });
+
+    test('a profile cannot point at a user that does not exist', () => {
+        expect(() =>
+            db.prepare(
+                `INSERT INTO UserProfile (userId, fullName, email) VALUES (?, ?, ?)`
+            ).run(999, 'Ghost User', 'ghost@uh.edu')
+        ).toThrow(/FOREIGN KEY/i);
+    });
+
+    test('email and password are required at the database level', () => {
+        expect(() =>
+            db.prepare(`INSERT INTO UserCredentials (email, passwordHash) VALUES (?, ?)`)
+                .run(null, 'hash')
+        ).toThrow(/NOT NULL/i);
+    });
+});
+
+describe('A4: updateProfile', () => {
+    test('updates the profile fields and leaves the credentials alone', async () => {
+        const registered = await request(app).post('/api/auth/register').send(VALID_USER);
+        const id = registered.body.user.id;
+
+        const updated = authService.updateProfile(id, {
+            name: 'Killian T.',
+            contactPhone: '713-555-0100',
+        });
+
+        expect(updated.name).toBe('Killian T.');
+        expect(updated.contactPhone).toBe('713-555-0100');
+        expect(updated.email).toBe('killian@uh.edu');
+        expect(updated.passwordHash).toBeUndefined();
+    });
+
+    test('leaves a field untouched when it is not supplied', async () => {
+        const registered = await request(app).post('/api/auth/register').send(VALID_USER);
+
+        authService.updateProfile(registered.body.user.id, { contactPhone: '713-555-0100' });
+        const updated = authService.updateProfile(registered.body.user.id, {});
+
+        expect(updated.name).toBe('Killian Trahan');
+        expect(updated.contactPhone).toBe('713-555-0100');
+    });
+
+    test('throws 404 for an unknown user', () => {
+        expect(() => authService.updateProfile(999, { name: 'Nobody' })).toThrow(/no longer exists/i);
+    });
+});
+
+describe('listUsers', () => {
+    test('returns every account without any password hashes', async () => {
+        await request(app).post('/api/auth/register').send(VALID_USER);
+        await request(app)
+            .post('/api/auth/register')
+            .send({ ...VALID_USER, email: 'admin@uh.edu', role: 'admin' });
+
+        const users = authService.listUsers();
+
+        expect(users).toHaveLength(2);
+        expect(users.map((u) => u.role)).toEqual(['user', 'admin']);
+        expect(JSON.stringify(users)).not.toContain('passwordHash');
     });
 });

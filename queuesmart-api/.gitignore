@@ -2,3 +2,8 @@ node_modules/
 coverage/
 .env
 *.log
+# A4 - local SQLite database files
+queuesmart.db
+queuesmart.db-journal
+queuesmart.db-wal
+queuesmart.db-shm
