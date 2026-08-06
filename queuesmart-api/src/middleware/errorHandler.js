@@ -25,6 +25,14 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // express.json() throws this when the request body is not parseable JSON.
+  // That is the caller's mistake, not ours, so it is a 400 and not a 500.
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      error: { code: 'INVALID_JSON', message: 'Request body is not valid JSON' },
+    });
+  }
+  
   if (process.env.NODE_ENV !== 'test') console.error(err);
 
   return res.status(500).json({

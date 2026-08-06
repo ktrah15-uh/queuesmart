@@ -53,3 +53,18 @@ describe('notFoundHandler', () => {
         expect(res.json.mock.calls[0][0].error.message).toContain('GET /api/nope');
     });
 });
+
+describe('malformed JSON body', () => {
+  const request = require('supertest');
+  const app = require('../app');
+
+  test('returns 400 INVALID_JSON instead of a 500', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .set('Content-Type', 'application/json')
+      .send('{"name":"Broken');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_JSON');
+  });
+});
