@@ -1,16 +1,18 @@
 const request = require('supertest');
 const app = require('../../app');
-const {store, resetStore, db} = require('../../data/store');
+const {resetStore} = require('../../data/store');
+const {db} = require('../../data/db');
 const {signToken} = require('../../middleware/auth');
-const {calculateWaitTime} = require('./queue.service');
+const {calculateWaitTime, getQueueStatus} = require('./queue.service');
 
 
 describe('Queue Management Module', () => {
     let userToken;
     let adminToken;
-    let testUserId = 1
-    let testAdminId = 2
+    let testUserId = 900;
+    let testAdminId = 901;
     let testServiceId = 1;
+    let testQueueId = 100;
 
 
 //runs before tests and assings mock data
@@ -18,20 +20,20 @@ describe('Queue Management Module', () => {
 
         resetStore();
 
-        db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
-            .run('student@uni.edu', 'test-hash', 'user');
-        db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
-            .run('admin@uni.edu', 'test-hash', 'admin');
-
         userToken = signToken({ id: testUserId, email: 'student@uni.edu', role: 'user'});
         adminToken = signToken({ id: testAdminId, email: 'admin@uni.edu', role: 'admin'});
 
-        store.services.push({
-            id: testServiceId,
-            name: 'Financial Aid',
-            expectedDuration: 15,
-            priority: 'high'
-        });
+        db.prepare('INSERT INTO UserCredentials (id, email, passwordHash, role) VALUES (?, ?, ?,?)')
+            .run(testUserId, 'student@uni.edu', 'test-hash', 'user');
+        db.prepare('INSERT INTO UserCredentials (id, email, passwordHash, role) VALUES (?, ?, ?,?)')
+            .run(testAdminId,'admin@uni.edu', 'test-hash', 'admin');
+
+         db.prepare(`INSERT INTO Service (id, name, description, expectedDuration, priority,
+             createdAt) VALUES (?, ?, ?, ?, ?, ?)`).run(testServiceId, 'Financial Aid', 'desc', 15, 'high', new Date().toISOString());
+
+        db.prepare(`INSERT INTO Queue (id, serviceId, status, createdAt)
+             VALUES (?, ?, ?, ?)`).run(testQueueId, testServiceId, 'open', new Date().toISOString());
+
 });
 
 describe('Wait-Time Estimation', () => {
@@ -83,7 +85,7 @@ describe('Post /api/queue/join', () => {
 
 //makes sure that when you leave the queue your ticket doesnt stay in
 describe('POST /api/queue/leave', () => {
-    it('should successfully update status to "left"', async () => {
+    it('should successfully update status to "canceled "', async () => {
         const joinResponse = await request(app)
         .post('/api/queue/join')
         .set('Authorization', `Bearer ${userToken}`)
@@ -97,7 +99,9 @@ describe('POST /api/queue/leave', () => {
         .send({ queueEntryId: ticketId});
 
         expect(leaveResponse.status).toBe(200);
-        expect(store.queueEntries.find(q => q.id === ticketId).status).toBe('left');
+        
+        const updatedEntry = db.prepare(`SELECT * FROM QueueEntry WHERE id = ?`).get(ticketId);
+        expect(updatedEntry.status).toBe('canceled');
         
     });
 });
@@ -128,5 +132,70 @@ it('should block a normal user from calling the serve route', async () => {
     expect(getResponse.status).toBe(403);
     expect(getResponse.body.error.code).toBe('FORBIDDEN');
 });
+it('should return 404 if there is no active queue for the service', async () => {
+    const getResponse = await request(app)
+        .post(`/api/queue/admin/${testServiceId}/serve`) // Assuming 999 is a non-existent serviceId
+        .set('Authorization', `Bearer ${adminToken}`)
+
+        expect(getResponse.status).toBe(404);
+        expect(getResponse.body.error.code).toBe('NOT_FOUND');
+    });
+});
+
+describe('Edge Cases and queue management', () => {
+    it('should return 404 when trying to leave a non-existent queue entry', async () => {
+        const response = await request(app)
+            .post('/api/queue/leave')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({ queueEntryId: 9999 }); 
+
+        expect(response.status).toBe(404);
+        
+    });
+    it('should fetch the status of a user\'s ticket correctly', async () => {
+        const joinResponse = await request(app)
+            .post('/api/queue/join')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({ serviceId: testServiceId });
+
+            const ticketId = joinResponse.body.ticket.id;
+
+            const status = getQueueStatus(testUserId, ticketId);
+
+            expect(status.position).toBe(1);
+            expect(status.ticket.id).toBe(ticketId);
+    });
+    it('should throw error for a non-existent ticket when fetching status', async () => {
+        expect(() => getQueueStatus(testUserId, 9999)).toThrow();
 });
 });
+
+describe('GET /api/queue/status/:queueEntryId', () => {
+    it('should successfully get the queue status via the API route', async () => {
+        const joinResponse = await request(app)
+            .post('/api/queue/join')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({ serviceId: testServiceId });
+
+        const ticketId = joinResponse.body.ticket.id;
+
+        const response = await request(app)
+            .get(`/api/queue/status/${ticketId}`)
+            .set('Authorization', `Bearer ${userToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.position).toBe(1);
+            expect(response.body.ticket.id).toBe(ticketId);
+    });
+});
+describe('GET /api/queue/admin/:serviceId', () => {
+    it('should succesfully return the active queue list for an admin via the API route', async () => {
+        const response = await request(app)
+            .get(`/api/queue/admin/${testServiceId}`)
+            .set('Authorization', `Bearer ${adminToken}`);
+
+            expect(response.status).toBe(200);
+            expect(Array.isArray(response.body)).toBe(true);
+    });
+});
+ });

@@ -1,12 +1,13 @@
-const { store, nextId } = require('../../data/store');  // store.queueEntries
+
+const { db } = require('../../data/db');  // store.queueEntrie
 const { ApiError } = require('../../utils/validate');
 const notificationsService = require('../notifications/notifications.service');
 const historyService = require('../history/history.service');
 
 const ALMOST_UP_POSITION = 2;
-
+//notifies users in line that they are almost up based on their position in the queue
 function notifyQueueAdvance(serviceId, fromPosition) {
-    const service = store.services.find(s => s.id === serviceId);
+    const service = db.prepare(`SELECT name FROM Service WHERE id = ?`).get(serviceId);
     const serviceName = service ? service.name : 'your service';
     const waitingList = getQueueForService(serviceId);
 
@@ -21,14 +22,21 @@ function notifyQueueAdvance(serviceId, fromPosition) {
 
 // retrives array of user waiting for a individual service, sorting them by oldest entries first 
 function getQueueForService(serviceId) {
-    return store.queueEntries
-        .filter(ticket => ticket.serviceId === serviceId && ticket.status === 'waiting')
-        .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+
+    const activeQueue = db.prepare(`SELECT id FROM Queue WHERE serviceId = ? AND status = 'open'`).get(serviceId);
+    
+    if(!activeQueue) {
+        return [];
+    }
+
+    const entries = db.prepare(`SELECT * FROM QueueEntry WHERE queueId = ? AND status = 'waiting' ORDER BY joinTime ASC`).all(activeQueue.id);
+    
+    return entries;
 }
 
 //calculates estimated wiat time based on position
 function calculateWaitTime(serviceId, position) {
-    const service = store.services.find(s => s.id === serviceId);
+    const service = db.prepare(`SELECT expectedDuration FROM Service WHERE id = ?`).get(serviceId);
     
     if(!service || position <= 1){
         return 0;
@@ -39,34 +47,41 @@ function calculateWaitTime(serviceId, position) {
 //adds a user to queue for a specific service
 function joinQueue(userId, serviceId) {
     //makes sure service exists
-    const service = store.services.find(s => s.id === serviceId);
-    if (!service) {
-        throw new ApiError(404, 'NOT_FOUND', ' service does not exist.');
+   const activeQueue = db.prepare(`SELECT id FROM Queue WHERE serviceId = ? AND status = 'open'`).get(serviceId);
+
+    if(!activeQueue){
+        throw new ApiError(404, 'NOT_FOUND', 'This service is currently closed or does not exist');
     }
 
     // Check if the user already has an active ticket and prevent them from making another 
-    const isWaiting = store.queueEntries.find((ticket) => ticket.userId === userId && ticket.status === 'waiting');
+    const isWaiting = db.prepare(`SELECT id FROM QueueEntry WHERE userId = ? AND status = 'waiting'`).get(userId);
+
     if (isWaiting) {
         throw new ApiError(400, 'ALREADY_IN_QUEUE', 'You are already in Line');
     }
 
+    const countResult = db.prepare(`SELECT COUNT(*) as count FROM QueueEntry WHERE queueId = ? AND status = 'waiting'`).get(activeQueue.id);
+
+    const position = (countResult.count || 0) + 1;
+
+    const joinTime = new Date().toISOString();
+    const result = db.prepare(`INSERT INTO QueueEntry (queueId, userId,position , joinTime, status)
+         VALUES (?, ?, ?, ?,'waiting')`).run(activeQueue.id, userId, position, joinTime);
+
     // Create a new queue entry
-    const id = nextId('queueEntries');
-    const entry = {
-        id,
-        userId,
-        serviceId,
-        status: 'waiting',
-        joinedAt: new Date().toISOString(),
-        priority: service.priority || 'medium'
-    };
-
-    store.queueEntries.push(entry);
-
-    const waitingList = getQueueForService(serviceId);
-    const position = waitingList.findIndex(ticket => ticket.id === id) + 1; // +1 because index is 0-based
+    const newEntryId = result.lastInsertRowid;
     const estimatedWaitTime = calculateWaitTime(serviceId, position);
 
+    const ticket = {
+        id: newEntryId,
+        queueId: activeQueue.id,
+        userId,
+        position,
+        joinedAt: joinTime,
+        status: 'waiting'
+    }
+ // Notify the user that they have joined the queue
+    const service = db.prepare(`SELECT name FROM Service WHERE id = ?`).get(serviceId);
     notificationsService.notify(
         userId,
         'queue_joined',
@@ -80,74 +95,97 @@ function joinQueue(userId, serviceId) {
         );
     }
 
-    return { ticket: entry, position, estimatedWaitTime };
+
+    return {ticket, position, estimatedWaitTime };
+
 }
 
 //removes user from queue and update their status to left
 function leaveQueue(userId, queueEntryId) {
-    const entry = store.queueEntries.find(ticket => ticket.id === queueEntryId);
-    
+    const entry = db.prepare(`SELECT * FROM QueueEntry WHERE id = ?`).get(queueEntryId);
+
     if (!entry) throw new ApiError(404, 'NOT_FOUND', 'Queue entry not found');
     if (entry.userId !== userId) throw new ApiError(403, 'FORBIDDEN', 'User has wrong ticket');
     if (entry.status !== 'waiting') throw new ApiError(400, 'BAD_REQUEST', 'Queue entry is not in Line');
 
-    const waitingList = getQueueForService(entry.serviceId);
+    const queue = db.prepare(`SELECT serviceId FROM Queue WHERE id = ?`).get(entry.queueId);
+    const service = db.prepare(`SELECT name FROM Service WHERE id = ?`).get(queue.serviceId);
+
+    const waitingList = getQueueForService(queue.serviceId);
     const position = waitingList.findIndex(ticket => ticket.id === queueEntryId) + 1;
 
-    entry.status = 'left';
+    db.prepare(`UPDATE QueueEntry SET status = 'canceled' WHERE id = ?`).run(queueEntryId);
 
-    const service = store.services.find(s => s.id === entry.serviceId);
     historyService.recordHistory({
         userId: entry.userId,
-        serviceId: entry.serviceId,
+        serviceId: queue.serviceId,
         serviceName: service ? service.name : 'Unknown service',
-        joinedAt: entry.joinedAt,
+        joinedAt: entry.joinTime,
         outcome: 'left'
     });
-    notifyQueueAdvance(entry.serviceId, position);
+    notifyQueueAdvance(queue.serviceId, position);
 
     return { message: 'Successfully left the queue.' };
 }
 
 //retrives status and wait time of a user individual ticket
 function getQueueStatus(userId, queueEntryId) {
-    const entry = store.queueEntries.find(ticket => ticket.id === queueEntryId);
+    const entry = db.prepare(`SELECT * FROM QueueEntry WHERE id = ?`).get(queueEntryId);
+
+    
     if (!entry) throw new ApiError(404, 'NOT_FOUND', 'Ticket not found');
     if (entry.userId !== userId) throw new ApiError(403, 'FORBIDDEN', 'Cannot view another users ticket');
 
 //checking if status is waiting if not return 0 values 
     if(entry.status !== 'waiting'){
-        return {ticket: entry, position: 0, estimatedWaitTimeL: 0};
+        return {ticket: entry, position: 0, estimatedWaitTime: 0};
     }
 
-    const waitingList = getQueueForService(entry.serviceId);
-    const position = waitingList.findIndex(ticket => ticket.id === queueEntryId) + 1;
-    const estimatedWaitTime = calculateWaitTime(entry.serviceId, position);
+    const positionResult = db.prepare(`SELECT COUNT(*) as count FROM QueueEntry WHERE queueId = ? AND status = 
+        'waiting' AND joinTime <= ?`).get(entry.queueId, entry.joinTime);
+
+    const position = positionResult.count || 1;
+
+    const queue = db.prepare(`SELECT serviceId FROM Queue WHERE id = ?`).get(entry.queueId);
+    const estimatedWaitTime = calculateWaitTime(queue.serviceId, position);
 
     return { ticket: entry, position, estimatedWaitTime };
 }
 
 //moves the queue by marking the user first in line as served
 function serveNext(serviceId) {
-    const waitingQueue = getQueueForService(serviceId);
-    if (waitingQueue.length === 0) {
-        throw new ApiError(404, 'NOT_FOUND', 'No entries in the queue');
+
+    const activeQueue =  db.prepare(`SELECT id FROM Queue WHERE serviceId = ? AND status = 'open'`).get(serviceId);
+    
+    if (!activeQueue) {
+        throw new ApiError(404, 'NOT_FOUND', 'This service is currently closed or does not exist');
     }
 
-    const nextUser = waitingQueue[0];
-    nextUser.status = 'served';
+    const upNext = db.prepare(`SELECT * FROM QueueEntry WHERE queueId = ? AND status = 'waiting' ORDER BY joinTime 
+        ASC LIMIT 1`).get(activeQueue.id);
 
-    const service = store.services.find(s => s.id === serviceId);
+    if (!upNext) {
+        throw new ApiError(404, 'NOT_FOUND', 'No users in line for this service');
+    }
+
+    db.prepare(`UPDATE QueueEntry SET status = 'served' WHERE id = ?`).run(upNext.id);
+    upNext.status = 'served';
+  
+    const service = db.prepare(`SELECT name FROM Service WHERE id = ?`).get(serviceId);
+
     historyService.recordHistory({
-        userId: nextUser.userId,
+        userId: upNext.userId,
         serviceId: serviceId,
         serviceName: service ? service.name : 'Unknown service',
-        joinedAt: nextUser.joinedAt,
+        joinedAt: upNext.joinTime,
         outcome: 'served'
     });
+
     notifyQueueAdvance(serviceId, 1);
 
-    return { message: 'Next user served.', ticket: nextUser };
+
+    return { message: 'Next user served.', ticket: upNext };
+
 }
 
 module.exports = {
