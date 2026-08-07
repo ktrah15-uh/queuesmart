@@ -192,7 +192,7 @@ function ServiceManagementContent() {
                   <div>
                     <h3 style={{ margin: "0 0 4px 0" }}>{service.name}</h3>
                     <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>
-                      {service.expectedDuration} mins · {service.isOpen ? "open" : "closed"}
+                      {service.expectedDuration} mins
                     </p>
                     <span style={{ fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", color: service.priority === "high" ? "var(--color-error)" : service.priority === "medium" ? "var(--color-warning)" : "var(--color-text-muted)" }}>
                       {service.priority} Priority

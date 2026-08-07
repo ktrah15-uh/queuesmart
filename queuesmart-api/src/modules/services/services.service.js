@@ -1,17 +1,40 @@
 /**
  * QueueSmart - Service Management business logic. Owner: Andres.
+ *
+ * A4: services live in the SQLite `Service` table (id, name, description,
+ * expectedDuration, priority, createdAt) instead of an in-memory array. Same
+ * exported function names/shapes as A3, so services.routes.js didn't change.
+ *
+ * NOTE: open/closed is NOT a Service column - that state lives on Alan's
+ * `Queue` table instead (see src/data/db.js). Don't add isOpen back here.
  */
 
-const { store, nextId } = require('../../data/store');
+const { store } = require('../../data/store');
+const { db } = require('../../data/db');
 const { ApiError } = require('../../utils/validate');
 
-// returns every service, newest first isn't required - keep insertion order
+const selectAll = db.prepare('SELECT * FROM Service ORDER BY id');
+const selectById = db.prepare('SELECT * FROM Service WHERE id = ?');
+const insertService = db.prepare(`
+  INSERT INTO Service (name, description, expectedDuration, priority)
+  VALUES (@name, @description, @expectedDuration, @priority)
+`);
+const updateServiceRow = db.prepare(`
+  UPDATE Service
+     SET name             = COALESCE(@name, name),
+         description      = COALESCE(@description, description),
+         expectedDuration = COALESCE(@expectedDuration, expectedDuration),
+         priority         = COALESCE(@priority, priority)
+   WHERE id = @id
+`);
+const deleteServiceRow = db.prepare('DELETE FROM Service WHERE id = ?');
+
 function listServices() {
-  return store.services;
+  return selectAll.all();
 }
 
 function findService(id) {
-  return store.services.find((s) => s.id === id) || null;
+  return selectById.get(id) || null;
 }
 
 function getServiceById(id) {
@@ -22,21 +45,10 @@ function getServiceById(id) {
 
 /**
  * Creates a service. `data` is already validated/coerced by validateBody().
- * New services always start open.
  */
 function createService({ name, description, expectedDuration, priority }) {
-  const service = {
-    id: nextId('services'),
-    name,
-    description,
-    expectedDuration,
-    priority,
-    isOpen: true,
-    createdAt: new Date().toISOString(),
-  };
-
-  store.services.push(service);
-  return service;
+  const info = insertService.run({ name, description, expectedDuration, priority });
+  return findService(info.lastInsertRowid);
 }
 
 /**
@@ -44,18 +56,30 @@ function createService({ name, description, expectedDuration, priority }) {
  * @throws ApiError 404 if the service doesn't exist.
  */
 function updateService(id, data) {
-  const service = getServiceById(id);
-  Object.assign(service, data);
-  return service;
+  getServiceById(id); // 404 if missing
+
+  updateServiceRow.run({
+    id,
+    name: data.name ?? null,
+    description: data.description ?? null,
+    expectedDuration: data.expectedDuration ?? null,
+    priority: data.priority ?? null,
+  });
+  return findService(id);
 }
 
 /**
  * Deletes a service, refusing if anyone is currently waiting in its queue -
  * otherwise those tickets would point at a service that no longer exists.
+ *
+ * Queue entries are still Alan's in-memory store.queueEntries (A4: TODO on
+ * his side to move to the Queue/QueueEntry tables) - once that migrates,
+ * this check should move to a DB query too.
+ *
  * @throws ApiError 404 if missing, 409 if the queue for it isn't empty.
  */
 function deleteService(id) {
-  const service = getServiceById(id);
+  getServiceById(id); // 404 if missing
 
   const hasWaitingEntries = store.queueEntries.some(
     (entry) => entry.serviceId === id && entry.status === 'waiting'
@@ -64,8 +88,7 @@ function deleteService(id) {
     throw new ApiError(409, 'CONFLICT', 'Cannot delete a service with people waiting in its queue');
   }
 
-  const index = store.services.indexOf(service);
-  store.services.splice(index, 1);
+  deleteServiceRow.run(id);
   return { message: 'Service deleted' };
 }
 

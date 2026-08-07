@@ -14,7 +14,6 @@ describe('Queue Management Module', () => {
     let testServiceId = 1;
     let testQueueId = 100;
 
-
 //runs before tests and assings mock data
     beforeEach(() => {
 
@@ -28,10 +27,13 @@ describe('Queue Management Module', () => {
         db.prepare('INSERT INTO UserCredentials (id, email, passwordHash, role) VALUES (?, ?, ?,?)')
             .run(testAdminId,'admin@uni.edu', 'test-hash', 'admin');
 
-         db.prepare(`INSERT INTO Service (id, name, description, expectedDuration, priority,
-             createdAt) VALUES (?, ?, ?, ?, ?, ?)`).run(testServiceId, 'Financial Aid', 'desc', 15, 'high', new Date().toISOString());
-
-        db.prepare(`INSERT INTO Queue (id, serviceId, status, createdAt)
+        // A4: services now live in the Service table (Andres), not store.services
+        const serviceInfo = db.prepare(
+            'INSERT INTO Service (name, description, expectedDuration, priority) VALUES (?, ?, ?, ?)'
+        ).run('Financial Aid', 'Test service', 15, 'high');
+        testServiceId = serviceInfo.lastInsertRowid;
+        
+         db.prepare(`INSERT INTO Queue (id, serviceId, status, createdAt)
              VALUES (?, ?, ?, ?)`).run(testQueueId, testServiceId, 'open', new Date().toISOString());
 
 });

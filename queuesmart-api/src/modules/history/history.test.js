@@ -213,7 +213,10 @@ describe('queue actions', () => {
   beforeEach(() => {
     db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
       .run('third@uh.edu', 'test-hash', 'user');
-    store.services.push({ id: 1, name: 'IT Help Desk', expectedDuration: 10, priority: 'medium' });
+    // A4: services now live in the Service table (Andres), not store.services
+    db.prepare(
+      'INSERT INTO Service (name, description, expectedDuration, priority) VALUES (?, ?, ?, ?)'
+    ).run('IT Help Desk', 'Test service', 10, 'medium');
   });
 
   test('joining a queue notifies the user', () => {

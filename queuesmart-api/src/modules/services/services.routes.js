@@ -22,7 +22,6 @@ const updateServiceSchema = {
   description: { type: 'string', maxLength: 500 },
   expectedDuration: { type: 'integer', min: 1, max: 480 },
   priority: { type: 'enum', values: ['low', 'medium', 'high'] },
-  isOpen: { type: 'boolean' },
 };
 
 function parseId(req, next) {
@@ -59,7 +58,7 @@ router.post('/', requireAuth, requireRole('admin'), validateBody(createServiceSc
   }
 });
 
-// PUT /api/services/:id - admin only, partial update (also used to open/close a service)
+// PUT /api/services/:id - admin only, partial update
 router.put('/:id', requireAuth, requireRole('admin'), validateBody(updateServiceSchema), (req, res, next) => {
   const id = parseId(req, next);
   if (id === null) return;

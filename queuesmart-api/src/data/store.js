@@ -8,7 +8,7 @@
  *   MIGRATED : users  -> UserCredentials + UserProfile tables (Killian, done)
  *   MIGRATED : notifications -> Notification (David, done)
  *   MIGRATED : history       -> History      (David, done)
- *   TODO     : services      -> Service            (Andres)
+ *   MIGRATED : services      -> Service            (Andres, done)
  *   TODO     : queueEntries  -> Queue + QueueEntry (Alan)
  *
  * Until your collection is migrated it keeps working exactly as it did in A3,
@@ -19,9 +19,6 @@
 const { db, resetDb } = require('./db');
 
 const store = {
-  // Andres - service management
-  services: [], // { id, name, description, expectedDuration, priority, isOpen, createdAt }
-
   // Alan - queue
   queueEntries: [], // { id, serviceId, userId, priority, joinedAt, status }
 };

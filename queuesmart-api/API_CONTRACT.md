@@ -71,27 +71,31 @@ Errors:
 | 401 | `INVALID_CREDENTIALS` | wrong email *or* wrong password (same message either way, deliberately) |
 | 404 | `NOT_FOUND` | `/auth/me` with a token for a deleted user |
 
-## Services — Andres (implemented)
+## Services — Andres (implemented, A4: persisted in SQLite)
 
 | Method | Path | Auth | Body / Params | Success |
 |--------|------|------|----------------|---------|
 | GET | `/services` | Bearer | — | 200 array of services |
 | GET | `/services/:id` | Bearer | URL param | 200 service |
 | POST | `/services` | Bearer + **admin** | `name, description, expectedDuration, priority?` | 201 service |
-| PUT | `/services/:id` | Bearer + **admin** | any subset of `name, description, expectedDuration, priority, isOpen` | 200 service |
+| PUT | `/services/:id` | Bearer + **admin** | any subset of `name, description, expectedDuration, priority` | 200 service |
 | DELETE | `/services/:id` | Bearer + **admin** | URL param | 200 `{ message }` |
 
-`priority` defaults to `medium` on create if omitted. New services always start `isOpen: true`;
-close/reopen a service through `PUT` with `{ isOpen: false }` / `{ isOpen: true }`.
+`priority` defaults to `medium` on create if omitted.
 
-Service object:
+**Open/closed is NOT a Service field.** That state lives on Alan's `Queue` table
+(`status`: `open`/`closed`) — see the Queue section below. A3 had an `isOpen` flag
+on Service; A4 removed it once the DB schema put queue status where it belongs.
+
+Service object (matches the `Service` table exactly):
 
     { "id": 1, "name": "Financial Aid Advising", "description": "...",
-      "expectedDuration": 15, "priority": "high", "isOpen": true,
+      "expectedDuration": 15, "priority": "high",
       "createdAt": "2026-07-23T22:59:14.000Z" }
 
 Rules: name 2–100 chars, description ≤500 chars, expectedDuration 1–480 (minutes),
-priority one of `low`/`medium`/`high`.
+priority one of `low`/`medium`/`high`. Same limits enforced again at the DB layer via
+`CHECK` constraints in `src/data/db.js` as a backstop.
 
 Errors:
 | Status | Code | When |
@@ -100,8 +104,11 @@ Errors:
 | 404 | `NOT_FOUND` | no service with that id |
 | 409 | `CONFLICT` | tried to delete a service with people still waiting in its queue |
 
-Used directly by Alan's queue module: `store.services.find(s => s.id === serviceId)` for
-`expectedDuration`/`priority` when a ticket is created (see `queue.service.js`).
+Used directly by Alan's queue module: `require('../services/services.service').findService(serviceId)`
+for `expectedDuration`/`priority` when a ticket is created (see `queue.service.js`). This replaced
+the old `store.services.find(...)` lookup now that services live in the DB, not the in-memory store -
+`queue.test.js` and `history.test.js` were updated to seed the `Service` table instead of
+`store.services` for the same reason.
 
 ## Queue — Alan
 
