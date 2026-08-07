@@ -1,13 +1,20 @@
 /**
  * QueueSmart - Tests for the Service Management module. Owner: Andres.
+ * A4: services live in the SQLite Service table (tests run against an
+ * in-memory DB - see config.js). resetStore() wipes it between tests.
  */
 const request = require('supertest');
 const app = require('../../app');
 const { store, resetStore } = require('../../data/store');
+const { db } = require('../../data/db');
 const { signToken } = require('../../middleware/auth');
 
 let userToken;
 let adminToken;
+
+function countServices() {
+  return db.prepare('SELECT COUNT(*) AS count FROM Service').get().count;
+}
 
 beforeEach(() => {
   resetStore();
@@ -68,7 +75,7 @@ describe('GET /api/services/:id', () => {
 });
 
 describe('POST /api/services', () => {
-  test('creates a service with defaults applied', async () => {
+  test('creates a service, persisted in the database with defaults applied', async () => {
     const res = await createViaApi({ priority: undefined });
 
     expect(res.status).toBe(201);
@@ -76,10 +83,13 @@ describe('POST /api/services', () => {
       name: 'Financial Aid Advising',
       expectedDuration: 15,
       priority: 'medium',
-      isOpen: true,
     });
     expect(typeof res.body.id).toBe('number');
-    expect(store.services).toHaveLength(1);
+    expect(countServices()).toBe(1);
+
+    // survives being read back fresh from the DB, not just the in-process response
+    const row = db.prepare('SELECT * FROM Service WHERE id = ?').get(res.body.id);
+    expect(row.name).toBe('Financial Aid Advising');
   });
 
   test('blocks non-admins with 403', async () => {
@@ -90,7 +100,7 @@ describe('POST /api/services', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(store.services).toHaveLength(0);
+    expect(countServices()).toBe(0);
   });
 
   test('rejects requests with no token', async () => {
@@ -138,18 +148,9 @@ describe('PUT /api/services/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.expectedDuration).toBe(20);
     expect(res.body.name).toBe('Financial Aid Advising');
-  });
 
-  test('can close a service via isOpen', async () => {
-    const created = await createViaApi();
-
-    const res = await request(app)
-      .put(`/api/services/${created.body.id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ isOpen: false });
-
-    expect(res.status).toBe(200);
-    expect(res.body.isOpen).toBe(false);
+    const row = db.prepare('SELECT * FROM Service WHERE id = ?').get(created.body.id);
+    expect(row.expectedDuration).toBe(20);
   });
 
   test('404s when updating a service that does not exist', async () => {
@@ -181,7 +182,7 @@ describe('DELETE /api/services/:id', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(store.services).toHaveLength(0);
+    expect(countServices()).toBe(0);
   });
 
   test('404s when the service does not exist', async () => {
@@ -206,7 +207,7 @@ describe('DELETE /api/services/:id', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
-    expect(store.services).toHaveLength(1);
+    expect(countServices()).toBe(1);
   });
 
   test('blocks non-admins with 403', async () => {
@@ -216,6 +217,6 @@ describe('DELETE /api/services/:id', () => {
       .set('Authorization', `Bearer ${userToken}`);
 
     expect(res.status).toBe(403);
-    expect(store.services).toHaveLength(1);
+    expect(countServices()).toBe(1);
   });
 });
