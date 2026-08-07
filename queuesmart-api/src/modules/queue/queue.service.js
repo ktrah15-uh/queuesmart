@@ -2,11 +2,14 @@ const { store, nextId } = require('../../data/store');  // store.queueEntries
 const { ApiError } = require('../../utils/validate');
 const notificationsService = require('../notifications/notifications.service');
 const historyService = require('../history/history.service');
+// A4: services moved to the Service table (Andres) - store.services no longer
+// exists, so service lookups go through this instead of the old in-memory find().
+const servicesService = require('../services/services.service');
 
 const ALMOST_UP_POSITION = 2;
 
 function notifyQueueAdvance(serviceId, fromPosition) {
-    const service = store.services.find(s => s.id === serviceId);
+    const service = servicesService.findService(serviceId);
     const serviceName = service ? service.name : 'your service';
     const waitingList = getQueueForService(serviceId);
 
@@ -28,7 +31,7 @@ function getQueueForService(serviceId) {
 
 //calculates estimated wiat time based on position
 function calculateWaitTime(serviceId, position) {
-    const service = store.services.find(s => s.id === serviceId);
+    const service = servicesService.findService(serviceId);
     
     if(!service || position <= 1){
         return 0;
@@ -39,7 +42,7 @@ function calculateWaitTime(serviceId, position) {
 //adds a user to queue for a specific service
 function joinQueue(userId, serviceId) {
     //makes sure service exists
-    const service = store.services.find(s => s.id === serviceId);
+    const service = servicesService.findService(serviceId);
     if (!service) {
         throw new ApiError(404, 'NOT_FOUND', ' service does not exist.');
     }
@@ -96,7 +99,7 @@ function leaveQueue(userId, queueEntryId) {
 
     entry.status = 'left';
 
-    const service = store.services.find(s => s.id === entry.serviceId);
+    const service = servicesService.findService(entry.serviceId);
     historyService.recordHistory({
         userId: entry.userId,
         serviceId: entry.serviceId,
@@ -137,7 +140,7 @@ function serveNext(serviceId) {
     const nextUser = waitingQueue[0];
     nextUser.status = 'served';
 
-    const service = store.services.find(s => s.id === serviceId);
+    const service = servicesService.findService(serviceId);
     historyService.recordHistory({
         userId: nextUser.userId,
         serviceId: serviceId,

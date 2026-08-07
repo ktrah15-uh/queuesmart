@@ -10,7 +10,7 @@ describe('Queue Management Module', () => {
     let adminToken;
     let testUserId = 1
     let testAdminId = 2
-    let testServiceId = 1;
+    let testServiceId;
 
 
 //runs before tests and assings mock data
@@ -26,12 +26,11 @@ describe('Queue Management Module', () => {
         userToken = signToken({ id: testUserId, email: 'student@uni.edu', role: 'user'});
         adminToken = signToken({ id: testAdminId, email: 'admin@uni.edu', role: 'admin'});
 
-        store.services.push({
-            id: testServiceId,
-            name: 'Financial Aid',
-            expectedDuration: 15,
-            priority: 'high'
-        });
+        // A4: services now live in the Service table (Andres), not store.services
+        const serviceInfo = db.prepare(
+            'INSERT INTO Service (name, description, expectedDuration, priority) VALUES (?, ?, ?, ?)'
+        ).run('Financial Aid', 'Test service', 15, 'high');
+        testServiceId = serviceInfo.lastInsertRowid;
 });
 
 describe('Wait-Time Estimation', () => {
