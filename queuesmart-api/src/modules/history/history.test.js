@@ -13,7 +13,8 @@ const queueService = require('../queue/queue.service');
 let userToken;
 let adminToken;
 
-beforeEach(() => {
+
+  beforeEach(() => {
   resetStore();
   db.prepare('INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)')
     .run('student@uh.edu', 'test-hash', 'user');
@@ -217,6 +218,9 @@ describe('queue actions', () => {
     db.prepare(
       'INSERT INTO Service (name, description, expectedDuration, priority) VALUES (?, ?, ?, ?)'
     ).run('IT Help Desk', 'Test service', 10, 'medium');
+
+    db.prepare(`INSERT INTO Queue (id,serviceId, status, createdAt) VALUES (?, ?, ?,?
+      )`).run(100,1, 'open', new Date().toISOString());
   });
 
   test('joining a queue notifies the user', () => {
