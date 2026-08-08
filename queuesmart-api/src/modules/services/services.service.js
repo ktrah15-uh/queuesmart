@@ -9,7 +9,6 @@
  * `Queue` table instead (see src/data/db.js). Don't add isOpen back here.
  */
 
-const { store } = require('../../data/store');
 const { db } = require('../../data/db');
 const { ApiError } = require('../../utils/validate');
 
@@ -28,6 +27,12 @@ const updateServiceRow = db.prepare(`
    WHERE id = @id
 `);
 const deleteServiceRow = db.prepare('DELETE FROM Service WHERE id = ?');
+const countWaitingForService = db.prepare(`
+  SELECT COUNT(*) AS n
+    FROM QueueEntry qe
+    JOIN Queue q ON q.id = qe.queueId
+   WHERE q.serviceId = ? AND qe.status = 'waiting'
+`);
 
 function listServices() {
   return selectAll.all();
@@ -72,19 +77,17 @@ function updateService(id, data) {
  * Deletes a service, refusing if anyone is currently waiting in its queue -
  * otherwise those tickets would point at a service that no longer exists.
  *
- * Queue entries are still Alan's in-memory store.queueEntries (A4: TODO on
- * his side to move to the Queue/QueueEntry tables) - once that migrates,
- * this check should move to a DB query too.
+ * A4: queue entries live in the Queue/QueueEntry tables, so this counts
+ * through a JOIN - QueueEntry references Queue, which references Service,
+ * so there is no serviceId on the entry itself.
  *
  * @throws ApiError 404 if missing, 409 if the queue for it isn't empty.
  */
 function deleteService(id) {
   getServiceById(id); // 404 if missing
 
-  const hasWaitingEntries = store.queueEntries.some(
-    (entry) => entry.serviceId === id && entry.status === 'waiting'
-  );
-  if (hasWaitingEntries) {
+  const { n } = countWaitingForService.get(Number(id));
+  if (n > 0) {
     throw new ApiError(409, 'CONFLICT', 'Cannot delete a service with people waiting in its queue');
   }
 

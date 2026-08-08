@@ -5,7 +5,7 @@
  */
 const request = require('supertest');
 const app = require('../../app');
-const { store, resetStore } = require('../../data/store');
+const { resetStore } = require('../../data/store');
 const { db } = require('../../data/db');
 const { signToken } = require('../../middleware/auth');
 
@@ -192,14 +192,17 @@ describe('DELETE /api/services/:id', () => {
 
   test('refuses to delete a service with people waiting', async () => {
     const created = await createViaApi();
-    store.queueEntries.push({
-      id: 1,
-      serviceId: created.body.id,
-      userId: 1,
-      status: 'waiting',
-      joinedAt: new Date().toISOString(),
-      priority: 'high',
-    });
+    const userId = db.prepare(
+      'INSERT INTO UserCredentials (email, passwordHash, role) VALUES (?, ?, ?)'
+    ).run('waiting@uh.edu', 'test-hash', 'user').lastInsertRowid;
+
+    const queueId = db.prepare(
+      'INSERT INTO Queue (serviceId, status) VALUES (?, ?)'
+    ).run(created.body.id, 'open').lastInsertRowid;
+
+    db.prepare(
+      'INSERT INTO QueueEntry (queueId, userId, position, priority, status) VALUES (?, ?, ?, ?, ?)'
+    ).run(queueId, userId, 1, 'high', 'waiting');
 
     const res = await request(app)
       .delete(`/api/services/${created.body.id}`)
