@@ -33,6 +33,15 @@ const countWaitingForService = db.prepare(`
     JOIN Queue q ON q.id = qe.queueId
    WHERE q.serviceId = ? AND qe.status = 'waiting'
 `);
+const insertQueue = db.prepare(
+  "INSERT INTO Queue (serviceId, status) VALUES (?, 'open')"
+);
+
+const createServiceWithQueue = db.transaction((params) => {
+  const info = insertService.run(params);
+  insertQueue.run(info.lastInsertRowid);
+  return info.lastInsertRowid;
+});
 
 function listServices() {
   return selectAll.all();
@@ -50,11 +59,16 @@ function getServiceById(id) {
 
 /**
  * Creates a service. `data` is already validated/coerced by validateBody().
+ * A4: also opens a Queue row for it, in a transaction - a service without a
+ * queue can't be joined.
  */
+
 function createService({ name, description, expectedDuration, priority }) {
-  const info = insertService.run({ name, description, expectedDuration, priority });
-  return findService(info.lastInsertRowid);
+  const id = createServiceWithQueue({ name, description, expectedDuration, priority });
+  return findService(id);
 }
+
+
 
 /**
  * Partial update - only fields present in `data` are changed.

@@ -223,3 +223,9 @@ describe('DELETE /api/services/:id', () => {
     expect(countServices()).toBe(1);
   });
 });
+test('creating a service also opens a queue for it', async () => {
+  const created = await createViaApi();
+  const queue = db.prepare('SELECT * FROM Queue WHERE serviceId = ?').get(created.body.id);
+  expect(queue).toBeDefined();
+  expect(queue.status).toBe('open');
+});
