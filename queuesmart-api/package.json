@@ -9,7 +9,9 @@
     "dev": "node --watch server.js",
     "test": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:demo": "node scripts/seed-demo-history.js",
+    "seed:base": "node scripts/seed-demo-base.js"
   },
   "jest": {
     "testEnvironment": "node",
