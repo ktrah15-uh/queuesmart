@@ -26,6 +26,10 @@ function formatCell(key, value) {
   return String(value);
 }
 
+function todayFilename(type, ext) {
+  return `queuesmart-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+}
+
 function ReportsContent() {
   const [services, setServices] = useState([]);
   const [reportType, setReportType] = useState("users");
@@ -37,6 +41,7 @@ function ReportsContent() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [downloading, setDownloading] = useState({ csv: false, pdf: false });
 
   useEffect(() => {
     (async () => {
@@ -66,6 +71,27 @@ function ReportsContent() {
       setResult(null);
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleDownload(format) {
+    setError("");
+    setDownloading((prev) => ({ ...prev, [format]: true }));
+    try {
+      const blob = await reportsApi.download(reportType, format, currentFilters());
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = todayFilename(reportType, format);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      setError(err.message || `Could not download ${format.toUpperCase()}`);
+      setFieldErrors(err.fields || {});
+    } finally {
+      setDownloading((prev) => ({ ...prev, [format]: false }));
     }
   }
 
@@ -131,6 +157,15 @@ function ReportsContent() {
         <Button type="submit" disabled={running}>
           {running ? "Running..." : "Run"}
         </Button>
+
+        <div style={{ display: "flex", gap: "var(--space-sm)", marginLeft: "auto" }}>
+          <Button type="button" variant="secondary" onClick={() => handleDownload("csv")} disabled={downloading.csv}>
+            {downloading.csv ? "Preparing CSV..." : "Download CSV"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => handleDownload("pdf")} disabled={downloading.pdf}>
+            {downloading.pdf ? "Preparing PDF..." : "Download PDF"}
+          </Button>
+        </div>
       </form>
 
       {error && <p style={{ color: "var(--color-error)", marginBottom: "var(--space-md)" }}>{error}</p>}
