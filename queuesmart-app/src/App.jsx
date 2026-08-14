@@ -11,6 +11,7 @@ import History from "./pages/History";
 import AdminDashboard from "./pages/AdminDashboard";
 import ServiceManagement from "./pages/ServiceManagement";
 import QueueManagement from "./pages/QueueManagement";
+import Reports from "./pages/Reports";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
@@ -29,6 +30,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/services" element={<ServiceManagement />} />
         <Route path="/admin/queues" element={<QueueManagement />} />
+        <Route path="/admin/reports" element={<Reports />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="*" element={<h1>404 — Page Not Found</h1>} />

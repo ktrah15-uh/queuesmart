@@ -100,3 +100,39 @@ export const notificationsApi = {
     markAllRead: () => api.post('/notifications/read-all'),
     clearAll: () => api.del('/notifications'),
 };
+
+// --- Reports (Andres) ---
+
+/** Drops null/undefined/empty filter values instead of sending them as "undefined". */
+function toQueryString(params = {}) {
+    const usp = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') usp.set(key, value);
+    });
+    const qs = usp.toString();
+    return qs ? `?${qs}` : '';
+}
+
+/**
+ * Export isn't JSON, so it can't go through request() - fetched directly here,
+ * same base URL and auth header, returning a Blob for the caller to save.
+ */
+async function downloadReport(type, format, filters) {
+    const res = await fetch(`${BASE_URL}/reports/${type}/export${toQueryString({ ...filters, format })}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+    });
+
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const err = data.error || {};
+        throw new ApiRequestError(res.status, err.code || 'UNKNOWN', err.message || 'Export failed', err.fields);
+    }
+
+    return res.blob();
+}
+
+export const reportsApi = {
+    summary: (filters) => api.get(`/reports/summary${toQueryString(filters)}`),
+    get: (type, filters) => api.get(`/reports/${type}${toQueryString(filters)}`),
+    download: (type, format, filters) => downloadReport(type, format, filters),
+};
