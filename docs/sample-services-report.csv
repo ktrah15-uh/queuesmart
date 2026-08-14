@@ -1,0 +1,5 @@
+ID,Service,Priority,Expected (min),Entries,Served,Left,Avg wait (min),Waiting now
+2,IT Help Desk,medium,15,483,406,49,14.6,4
+1,Financial Aid Support,medium,30,478,409,36,52.7,1
+4,Registrar Office,low,10,466,381,57,25.7,0
+3,Academic Advising,high,20,459,395,43,39.9,0
