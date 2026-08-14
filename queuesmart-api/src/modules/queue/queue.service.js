@@ -80,6 +80,7 @@ function joinQueue(userId, serviceId) {
     const ticket = {
         id: newEntryId,
         queueId: activeQueue.id,
+        serviceId,
         userId,
         position,
         joinedAt: joinTime,
