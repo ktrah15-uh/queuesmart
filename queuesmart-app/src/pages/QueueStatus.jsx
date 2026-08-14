@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useQueue } from "../contexts/QueueContext";
 import Button from "../components/Button";
+import SmartInsight from "../components/SmartInsight";
 
 // displays the status of users ticket and wait time 
 function QueueStatus() {
@@ -70,6 +71,8 @@ function QueueStatus() {
       <div style={{ marginBottom: "var(--space-lg)" }}>
         {stateUI}
       </div>
+
+      <SmartInsight serviceId={myTicket.serviceId} position={myTicket.position} />
 
       {myTicket.status !== 'served' ? (
         <Button onClick={handleLeave} variant="secondary" style={{ borderColor: "var(--color-error)", color: "var(--color-error)" }}>

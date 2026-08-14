@@ -31,7 +31,7 @@ export function QueueProvider({ children }) {
       const data = await api.post('/queue/join', { serviceId });
 
       if (data.ticket){
-        setQueues([...queues, data.ticket]);
+        setQueues([...queues, { ...data.ticket, position: data.position }]);
         setActiveTicketId(data.ticket.id);
         return data.ticket.id;
       }

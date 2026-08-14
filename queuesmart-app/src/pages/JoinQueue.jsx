@@ -2,6 +2,7 @@ import {useState} from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueue } from "../contexts/QueueContext";
 import Button from "../components/Button";
+import SmartInsight from "../components/SmartInsight";
 
 // Screen for users to pick a service and get ticket 
 function JoinQueue() {
@@ -111,6 +112,8 @@ function JoinQueue() {
               </div>
             </div>
           )}
+
+          {selectedService && <SmartInsight serviceId={selectedService.id} />}
 
           <div style={{ display: "flex", gap: "var(--space-sm)", justifyContent: "center", marginTop: "var(--space-md)" }}>
             {/* prevent button function if nothing selected  */}
