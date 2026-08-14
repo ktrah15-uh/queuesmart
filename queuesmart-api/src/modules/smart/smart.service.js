@@ -13,6 +13,7 @@ function getService(serviceId) {
 
 //learns the time of queue services based on history
 function learnServiceMinutes(serviceId) {
+
     const service = getService(serviceId);
 
     //last 50 people
@@ -21,10 +22,9 @@ function learnServiceMinutes(serviceId) {
 
          // not enough data to learn
 if (history.length < 2){
-    return {learnedRate: service.expectedDuration, source: 'expectedDuration'};
+    return {rate: service.expectedDuration, source: 'expectedDuration'};
 }
 
-history.sort((a, b) => new Date(b.endedAt) - new Date(a.endedAt));
 
 let totalGap = 0;
 let validCount = 0;
@@ -32,6 +32,7 @@ let validCount = 0;
 for (let i = 1; i < history.length; i++) {
     const prev = new Date(history[i - 1].endedAt);
     const curr = new Date(history[i].endedAt);
+
     const gap = (prev - curr) / 60000; // convert milliseconds to minutes
 
     //if gap is too large then the service was not available at that time and dont want to ruin the average
@@ -43,16 +44,16 @@ for (let i = 1; i < history.length; i++) {
 
 //if we throw out too many gaps likely 
 if (validCount < 3){
-    return {learnedRate: service.expectedDuration, source: 'expectedDuration'};
+    return {rate: service.expectedDuration, source: 'expectedDuration'};
 }
 
-return {learnedRate:Math.round(totalGap /validCount), source: 'history'};
+return {rate:Math.round(totalGap /validCount), source: 'history'};
 }
 
 //estimates the wait time for a given service and position
 function estimateWait(serviceId,position){
     getService(serviceId);
-    const {learnedRate} = learnServiceMinutes(serviceId);
+    const {rate} = learnServiceMinutes(serviceId);
 
     
     let peopleAhead = 0;
@@ -66,7 +67,7 @@ function estimateWait(serviceId,position){
         peopleAhead = waitRow.count;
     }
 
-    return peopleAhead * learnedRate;
+    return peopleAhead * rate;
 }
 //recommends an alternative service if it saves at least 10 minutes and 25% of the wait time
 function recommendAlternative(serviceId){
@@ -112,7 +113,7 @@ function bestTimeToJoin(serviceId){
 
     //group historical data and ind wait time in minutes from the database
     const hourData = db.prepare(`SELECT CAST(strftime('%H', joinedAt) AS INTEGER) AS hour,
-        AVG(julianday(endedAt) - julianday(joinedAt)) * 1440) as avgWait. 
+        AVG((julianday(endedAt) - julianday(joinedAt)) * 1440) as avgWait, 
         COUNT(*) AS visits FROM History WHERE serviceId = ? AND joinedAt IS NOT NULL AND endedAt IS NOT NULL 
         GROUP BY CAST(strftime('%H', joinedAt) AS INTEGER)`).all(serviceId);
 
@@ -134,12 +135,12 @@ function bestTimeToJoin(serviceId){
     }
 //provides insight on the service including wait time, recommendation, and best times to join
     function getInsight(serviceId,position){
-        const { learnedRate, source } = learnServiceMinutes(serviceId);
+        const { rate, source } = learnServiceMinutes(serviceId);
         const estimate = estimateWait(serviceId, position);
         const recommendation = recommendAlternative(serviceId);
         const { quietest, busiest } = bestTimeToJoin(serviceId);
 
-        return { learnedRate, source, estimateWait: estimate, recommendation, bestTimes};
+        return { rate, source, estimateWait: estimate, recommendation, bestTimes: { quietest, busiest}};
     }
 
     module.exports = {
