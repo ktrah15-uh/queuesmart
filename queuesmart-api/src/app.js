@@ -15,6 +15,7 @@ const notificationRoutes = require('./modules/notifications/notifications.routes
 const historyRoutes = require('./modules/history/history.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const reportRoutes = require('./modules/reports/reports.routes');
+const  smartRoutes = require('./modules/smart/smart.routes');
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/smart', smartRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
