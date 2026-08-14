@@ -106,7 +106,7 @@ describe('Smart Service Module', () => {
             qe.run(queueId1, userId, 2, '2026-08-13 10:01:00');
              qe.run(queueId1, userId, 3, '2026-08-13 10:02:00');
 
-             const alt = smartService.smartService.recommendAlternative(serviceId1);
+             const alt = smartService.recommendAlternative(serviceId1);
 
              expect(alt).not.toBeNull();
              expect(alt.id).toBe(serviceId2);

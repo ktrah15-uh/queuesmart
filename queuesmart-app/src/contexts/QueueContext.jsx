@@ -1,9 +1,12 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { useAuth } from "./AuthContext";
 import { api } from "../api/client";
 
 const QueueContext = createContext();
 
 export function QueueProvider({ children }) {
+
+  const { user } = useAuth();
 
   // Load the fake users into our state
   const [queues, setQueues] = useState([]);
@@ -15,6 +18,10 @@ export function QueueProvider({ children }) {
 
   useEffect(() => {
     const fetchRealServices = async () => {
+      if (!user) {
+        setServices([]);
+        return;
+      }
       try {
         const data = await api.get('/services');
         setServices(data || []);
@@ -23,7 +30,7 @@ export function QueueProvider({ children }) {
       }
     };
     fetchRealServices();
-  }, []);
+  }, [user]);
 
   //adds new user to the queue
   const joinQueue = async (serviceId) => {
