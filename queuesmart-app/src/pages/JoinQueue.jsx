@@ -103,11 +103,8 @@ function JoinQueue() {
               <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: "var(--space-md) 0" }} />
 
               <div style={{ display: "grid", gap: "var(--space-xs)" }}>
-                <p style={{ margin: 0 }}>
-                  People currently ahead of you: <strong>{currentLineLength}</strong>
-                </p>
-                <p style={{ margin: 0 }}>
-                  Estimated wait time: <strong>{estimatedWait} minutes</strong>
+                <p style={{ margin: 0, color: "var(--color-text-muted)", fontstyle: "italic" }}>
+                  Join the queue to recieve your offical ticket positon.
                 </p>
               </div>
             </div>
