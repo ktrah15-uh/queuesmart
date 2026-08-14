@@ -38,8 +38,6 @@ function JoinQueue() {
 
  // calculate the current line length and estimated wait time whenever switching 
   const selectedService = services.find(s => s.id === selectedServiceId);
-  const currentLineLength = selectedService ? queues.filter(q => q.serviceId === selectedServiceId && q.status !== 'served').length : 0;
-  const estimatedWait = selectedService ? currentLineLength * selectedService.expectedDuration : 0;
 
   //
   const handleConfirm = async () => {
@@ -103,8 +101,8 @@ function JoinQueue() {
               <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: "var(--space-md) 0" }} />
 
               <div style={{ display: "grid", gap: "var(--space-xs)" }}>
-                <p style={{ margin: 0, color: "var(--color-text-muted)", fontstyle: "italic" }}>
-                  Join the queue to recieve your offical ticket positon.
+                <p style={{ margin: 0, color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                  Join the queue to receive your official ticket position.
                 </p>
               </div>
             </div>
