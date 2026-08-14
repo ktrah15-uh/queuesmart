@@ -95,4 +95,43 @@ describe('Smart Service Module', () => {
 
         expect(() => smartService.learnServiceMinutes(9999)).toThrow('not found');
     });
+
+     it('recommends an alternative if saving is big enough ', () => {
+
+        //load up queue so it had a big wait time
+        const qe = db.prepare(`INSERT INTO QueueEntry (queueId, userId, position, joinTime, status) VALUES 
+            (?, ?, ?, ?, 'waiting')`);
+
+            qe.run(queueId1, userId, 1, '2026-08-13 10:00:00'); 
+            qe.run(queueId1, userId, 2, '2026-08-13 10:01:00');
+             qe.run(queueId1, userId, 3, '2026-08-13 10:02:00');
+
+             const alt = smartService.smartService.recommendAlternative(serviceId1);
+
+             expect(alt).not.toBeNull();
+             expect(alt.id).toBe(serviceId2);
+        
+
+});
+
+ it('best times need enough samples ', () => {
+
+        //load up queue so it had a big wait time
+        const insert = db.prepare(`INSERT INTO History (userId, serviceId, serviceName, joinedAt, 
+            endedAt, outcome) VALUES (?, ?, 'S1', ?, ?, 'served')`);
+
+          
+        insert.run(userId, serviceId1, '2026-08-13 09:00:00', '2026-08-13 09:15:00');
+        insert.run(userId, serviceId1, '2026-08-13 09:05:00', '2026-08-13 09:20:00');
+
+        
+        insert.run(userId, serviceId1, '2026-08-13 10:00:00', '2026-08-13 10:15:00');
+        insert.run(userId, serviceId1, '2026-08-13 10:05:00', '2026-08-13 10:20:00');
+        insert.run(userId, serviceId1, '2026-08-13 10:10:00', '2026-08-13 10:25:00');
+
+        const times = smartService.bestTimeToJoin(serviceId1);
+        
+        expect(times.quietest.hour).toBe(10);
+
+});
 });
