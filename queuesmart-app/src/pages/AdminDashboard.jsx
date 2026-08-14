@@ -266,6 +266,18 @@ function AdminDashboard() {
           <p>View current queues, reorder, and serve users.</p>
           <Link to="/admin/queues">Go to Queue Management</Link>
         </div>
+
+        <div
+          style={{
+            padding: "var(--space-md)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius)",
+          }}
+        >
+          <h2>Reports</h2>
+          <p>Filter queue activity and export it as CSV or PDF.</p>
+          <Link to="/admin/reports">Go to Reports</Link>
+        </div>
       </div>
     </div>
   );
